@@ -7,6 +7,9 @@ import { useAuth } from '../context/AuthContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
+import ProductDetailScreen from '../screens/ProductDetailScreen';
+import CartScreen from '../screens/CartScreen';
+import OrdersScreen from '../screens/OrdersScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -28,6 +31,22 @@ function HomeTabs() {
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🏠</Text>
         }}
       />
+      <Tab.Screen
+        name="Cart"
+        component={CartScreen}
+        options={{
+          tabBarLabel: 'Cart',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🛒</Text>
+        }}
+      />
+      <Tab.Screen
+        name="Orders"
+        component={OrdersScreen}
+        options={{
+          tabBarLabel: 'Orders',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>📦</Text>
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -41,7 +60,10 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="Main" component={HomeTabs} />
+          <>
+            <Stack.Screen name="Main" component={HomeTabs} />
+            <Stack.Screen name="ProductDetail" component={ProductDetailScreen} />
+          </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
