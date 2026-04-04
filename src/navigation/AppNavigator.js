@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-
+import InvoiceScreen from '../screens/InvoiceScreen';
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProductDetailScreen from '../screens/ProductDetailScreen';
@@ -47,6 +47,14 @@ function HomeTabs() {
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>📦</Text>
         }}
       />
+      <Tab.Screen
+  name="Invoices"
+  component={InvoiceScreen}
+  options={{
+    tabBarLabel: 'Invoices',
+    tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🧾</Text>
+  }}
+/>
     </Tab.Navigator>
   );
 }
