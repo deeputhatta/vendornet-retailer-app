@@ -5,10 +5,8 @@ const API_URL = 'https://api.vendornet.in/api/v1';
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' }
 });
 
 // Add token to every request
@@ -18,29 +16,61 @@ api.interceptors.request.use(async (config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-});
+}, error => Promise.reject(error));
 
 // Auto refresh token on 401
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) prom.reject(error);
+    else prom.resolve(token);
+  });
+  failedQueue = [];
+};
+
 api.interceptors.response.use(
-  (response) => response,
-  async (error) => {
+  response => response,
+  async error => {
     const original = error.config;
+
     if (error.response?.status === 401 && !original._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then(token => {
+          original.headers.Authorization = `Bearer ${token}`;
+          return api(original);
+        }).catch(err => Promise.reject(err));
+      }
+
       original._retry = true;
+      isRefreshing = true;
+
       try {
         const refreshToken = await AsyncStorage.getItem('refresh_token');
+        if (!refreshToken) throw new Error('No refresh token');
+
         const res = await axios.post(`${API_URL}/auth/refresh-token`, {
           refresh_token: refreshToken
         });
+
         const newToken = res.data.token;
         await AsyncStorage.setItem('token', newToken);
+        api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
         original.headers.Authorization = `Bearer ${newToken}`;
+        processQueue(null, newToken);
         return api(original);
       } catch (err) {
+        processQueue(err, null);
         await AsyncStorage.multiRemove(['token', 'refresh_token', 'user']);
         return Promise.reject(err);
+      } finally {
+        isRefreshing = false;
       }
     }
+
     return Promise.reject(error);
   }
 );

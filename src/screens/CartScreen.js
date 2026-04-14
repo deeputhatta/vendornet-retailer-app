@@ -5,17 +5,23 @@ import {
 } from 'react-native';
 import { ordersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function CartScreen({ route, navigation }) {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const c = theme.colors;
 
-  useEffect(() => {
-    if (route.params?.item) {
-      addItem(route.params.item);
-    }
-  }, [route.params]);
+  const addedRef = React.useRef(false);
+
+useEffect(() => {
+  if (route.params?.item && !addedRef.current) {
+    addedRef.current = true;
+    addItem(route.params.item);
+  }
+}, []);
 
   const addItem = (newItem) => {
     setCartItems(prev => {
@@ -74,64 +80,100 @@ export default function CartScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: c.primary }]}>
         <Text style={styles.title}>My Cart</Text>
       </View>
 
       {cartItems.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>Your cart is empty</Text>
+          <Text style={[styles.emptyText, { color: c.textMuted }]}>
+            Your cart is empty
+          </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.shopLink}>Browse products</Text>
+            <Text style={[styles.shopLink, { color: c.primary }]}>
+              Browse products
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
-          <ScrollView style={styles.list}>
+          <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
             {cartItems.map(item => (
-              <View key={item.listing_id} style={styles.itemCard}>
+              <View
+                key={item.listing_id}
+                style={[styles.itemCard, {
+                  backgroundColor: c.surface,
+                  shadowColor: c.text,
+                }]}
+              >
                 <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.product_name}</Text>
-                  <Text style={styles.itemBrand}>{item.brand_name}</Text>
-                  <Text style={styles.itemSeller}>{item.wholesaler_name}</Text>
+                  <Text style={[styles.itemName, { color: c.text }]}>
+                    {item.product_name}
+                  </Text>
+                  <Text style={[styles.itemBrand, { color: c.primary }]}>
+                    {item.brand_name}
+                  </Text>
+                  <Text style={[styles.itemSeller, { color: c.textMuted }]}>
+                    {item.wholesaler_name}
+                  </Text>
                 </View>
                 <View style={styles.itemRight}>
-                  <Text style={styles.itemPrice}>
+                  <Text style={[styles.itemPrice, { color: c.text }]}>
                     ₹{(item.unit_price * item.quantity).toLocaleString('en-IN')}
                   </Text>
-                  <Text style={styles.itemQty}>Qty: {item.quantity}</Text>
+                  <Text style={[styles.itemQty, { color: c.textMuted }]}>
+                    Qty: {item.quantity}
+                  </Text>
                   {item.quantity < item.min_order_qty && (
-                    <Text style={styles.moqWarn}>Min: {item.min_order_qty}</Text>
+                    <Text style={[styles.moqWarn, { color: c.error }]}>
+                      Min: {item.min_order_qty}
+                    </Text>
                   )}
                   <TouchableOpacity onPress={() => removeItem(item.listing_id)}>
-                    <Text style={styles.removeBtn}>Remove</Text>
+                    <Text style={[styles.removeBtn, { color: c.error }]}>
+                      Remove
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
             ))}
           </ScrollView>
 
-          <View style={styles.footer}>
+          {/* Footer */}
+          <View style={[styles.footer, {
+            backgroundColor: c.surface,
+            borderTopColor: c.border,
+            shadowColor: c.text,
+          }]}>
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total Amount</Text>
-              <Text style={styles.totalAmount}>
+              <Text style={[styles.totalLabel, { color: c.text }]}>
+                Total Amount
+              </Text>
+              <Text style={[styles.totalAmount, { color: c.primary }]}>
                 ₹{totalAmount.toLocaleString('en-IN')}
               </Text>
             </View>
             {!allMOQMet && (
-              <Text style={styles.moqError}>
+              <Text style={[styles.moqError, { color: c.error }]}>
                 Some items are below minimum order quantity
               </Text>
             )}
             <TouchableOpacity
-              style={[styles.orderBtn, !allMOQMet && styles.orderBtnDisabled]}
+              style={[
+                styles.orderBtn,
+                { backgroundColor: allMOQMet ? c.primary : c.primaryLight }
+              ]}
               onPress={placeOrder}
               disabled={!allMOQMet || loading}
             >
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.orderBtnText}>Place Order</Text>
+                ? <ActivityIndicator color={c.textOnPrimary} />
+                : <Text style={[styles.orderBtnText, { color: c.textOnPrimary }]}>
+                    Place Order
+                  </Text>
               }
             </TouchableOpacity>
           </View>
@@ -142,29 +184,44 @@ export default function CartScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#185FA5', padding: 20, paddingTop: 48 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  container: { flex: 1 },
+  header: { padding: 20, paddingTop: 48 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { fontSize: 16, color: '#888', marginBottom: 12 },
-  shopLink: { color: '#185FA5', fontSize: 15, fontWeight: '600' },
+  emptyText: { fontSize: 16, marginBottom: 12 },
+  shopLink: { fontSize: 15, fontWeight: '600' },
   list: { flex: 1 },
-  itemCard: { backgroundColor: '#fff', margin: 8, marginHorizontal: 12, borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', elevation: 1 },
+  itemCard: {
+    margin: 8, marginHorizontal: 12,
+    borderRadius: 12, padding: 14,
+    flexDirection: 'row', justifyContent: 'space-between',
+    elevation: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 3,
+  },
   itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontWeight: '600', color: '#333' },
-  itemBrand: { fontSize: 13, color: '#185FA5', marginTop: 2 },
-  itemSeller: { fontSize: 12, color: '#888', marginTop: 2 },
+  itemName: { fontSize: 15, fontWeight: '600' },
+  itemBrand: { fontSize: 13, marginTop: 2 },
+  itemSeller: { fontSize: 12, marginTop: 2 },
   itemRight: { alignItems: 'flex-end' },
-  itemPrice: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  itemQty: { fontSize: 12, color: '#888', marginTop: 2 },
-  moqWarn: { fontSize: 11, color: '#E24B4A', marginTop: 2 },
-  removeBtn: { color: '#E24B4A', fontSize: 12, marginTop: 6 },
-  footer: { backgroundColor: '#fff', padding: 16, elevation: 4 },
+  itemPrice: { fontSize: 16, fontWeight: 'bold' },
+  itemQty: { fontSize: 12, marginTop: 2 },
+  moqWarn: { fontSize: 11, marginTop: 2 },
+  removeBtn: { fontSize: 12, marginTop: 6 },
+  footer: {
+    padding: 16,
+    elevation: 4,
+    borderTopWidth: 1,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.06, shadowRadius: 4,
+  },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  totalLabel: { fontSize: 16, color: '#333', fontWeight: '500' },
-  totalAmount: { fontSize: 20, fontWeight: 'bold', color: '#185FA5' },
-  moqError: { color: '#E24B4A', fontSize: 12, marginBottom: 8, textAlign: 'center' },
-  orderBtn: { backgroundColor: '#185FA5', borderRadius: 12, height: 50, justifyContent: 'center', alignItems: 'center' },
-  orderBtnDisabled: { backgroundColor: '#B5D4F4' },
-  orderBtnText: { color: '#fff', fontSize: 16, fontWeight: '600' }
+  totalLabel: { fontSize: 16, fontWeight: '500' },
+  totalAmount: { fontSize: 20, fontWeight: 'bold' },
+  moqError: { fontSize: 12, marginBottom: 8, textAlign: 'center' },
+  orderBtn: {
+    borderRadius: 12, height: 50,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  orderBtnText: { fontSize: 16, fontWeight: '600' },
 });

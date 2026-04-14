@@ -4,11 +4,20 @@ import {
   StyleSheet, ActivityIndicator, RefreshControl, Linking, Alert
 } from 'react-native';
 import { invoicesAPI } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+
+// Fixed semantic badge colors — same as OrdersScreen pattern
+const BADGE = {
+  new:    { bg: '#E6F1FB', text: '#0C447C' },
+  viewed: { bg: '#EAF3DE', text: '#27500A' },
+};
 
 export default function InvoiceScreen({ navigation }) {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const { theme } = useTheme();
+  const c = theme.colors;
 
   useEffect(() => {
     loadInvoices();
@@ -43,60 +52,90 @@ export default function InvoiceScreen({ navigation }) {
     }
   };
 
-  const renderInvoice = ({ item }) => (
-    <TouchableOpacity style={styles.card} onPress={() => viewInvoice(item)}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.invoiceNo}>{item.invoice_number}</Text>
-        <View style={[styles.badge,
-          item.status === 'viewed' ? styles.badgeViewed : styles.badgeNew
-        ]}>
-          <Text style={[styles.badgeText,
-            item.status === 'viewed' ? styles.badgeViewedText : styles.badgeNewText
-          ]}>
-            {item.status === 'viewed' ? 'Viewed' : 'New'}
+  const renderInvoice = ({ item }) => {
+    const badge = item.status === 'viewed' ? BADGE.viewed : BADGE.new;
+    return (
+      <TouchableOpacity
+        style={[styles.card, {
+          backgroundColor: c.surface,
+          shadowColor: c.text,
+        }]}
+        onPress={() => viewInvoice(item)}
+      >
+        {/* Card Header */}
+        <View style={styles.cardHeader}>
+          <Text style={[styles.invoiceNo, { color: c.text }]}>
+            {item.invoice_number}
+          </Text>
+          <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+            <Text style={[styles.badgeText, { color: badge.text }]}>
+              {item.status === 'viewed' ? 'Viewed' : 'New'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Wholesaler */}
+        <Text style={[styles.wholesaler, { color: c.primary }]}>
+          {item.wholesaler_name}
+        </Text>
+
+        {/* Amount + Date */}
+        <View style={[styles.cardFooter, {
+          borderTopColor: c.borderLight,
+        }]}>
+          <Text style={[styles.amount, { color: c.text }]}>
+            ₹{parseFloat(item.invoice_amount).toLocaleString('en-IN')}
+          </Text>
+          <Text style={[styles.date, { color: c.textMuted }]}>
+            {new Date(item.created_at).toLocaleDateString('en-IN')}
           </Text>
         </View>
-      </View>
-      <Text style={styles.wholesaler}>{item.wholesaler_name}</Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.amount}>
-          ₹{parseFloat(item.invoice_amount).toLocaleString('en-IN')}
-        </Text>
-        <Text style={styles.date}>
-          {new Date(item.created_at).toLocaleDateString('en-IN')}
-        </Text>
-      </View>
-      <View style={styles.gstRow}>
-        <Text style={styles.gstText}>HSN: {item.hsn_code}</Text>
-        <Text style={styles.gstText}>GSTIN: {item.gstin_wholesaler}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+
+        {/* GST Row */}
+        <View style={[styles.gstRow, { borderTopColor: c.borderLight }]}>
+          <Text style={[styles.gstText, { color: c.textMuted }]}>
+            HSN: {item.hsn_code}
+          </Text>
+          <Text style={[styles.gstText, { color: c.textMuted }]}>
+            GSTIN: {item.gstin_wholesaler}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) return (
-    <View style={styles.loading}>
-      <ActivityIndicator size="large" color="#185FA5" />
+    <View style={[styles.loading, { backgroundColor: c.background }]}>
+      <ActivityIndicator size="large" color={c.primary} />
     </View>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: c.background }]}>
+
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: c.primary }]}>
         <Text style={styles.title}>My Invoices</Text>
       </View>
+
       <FlatList
         data={invoices}
         renderItem={renderInvoice}
         keyExtractor={item => item.invoice_id}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => {
-            setRefreshing(true);
-            loadInvoices();
-          }} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadInvoices(); }}
+            tintColor={c.primary}
+            colors={[c.primary]}
+          />
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No invoices yet</Text>
+            <Text style={[styles.emptyText, { color: c.textMuted }]}>
+              No invoices yet
+            </Text>
           </View>
         }
       />
@@ -105,25 +144,37 @@ export default function InvoiceScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#185FA5', padding: 20, paddingTop: 48 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  container: { flex: 1 },
+  header: { padding: 20, paddingTop: 48 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  card: { backgroundColor: '#fff', margin: 8, marginHorizontal: 12, borderRadius: 12, padding: 16, elevation: 1 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  invoiceNo: { fontSize: 15, fontWeight: '600', color: '#333' },
+  card: {
+    margin: 8, marginHorizontal: 12,
+    borderRadius: 12, padding: 16,
+    elevation: 1,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 4,
+  },
+  invoiceNo: { fontSize: 15, fontWeight: '600' },
   badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeNew: { backgroundColor: '#E6F1FB' },
-  badgeViewed: { backgroundColor: '#EAF3DE' },
   badgeText: { fontSize: 11, fontWeight: '600' },
-  badgeNewText: { color: '#0C447C' },
-  badgeViewedText: { color: '#27500A' },
-  wholesaler: { fontSize: 13, color: '#185FA5', marginBottom: 8 },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  amount: { fontSize: 20, fontWeight: 'bold', color: '#333' },
-  date: { fontSize: 12, color: '#888' },
-  gstRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  gstText: { fontSize: 11, color: '#888' },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
-  emptyText: { fontSize: 16, color: '#888' }
+  wholesaler: { fontSize: 13, marginBottom: 8 },
+  cardFooter: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 8,
+    paddingTop: 8, borderTopWidth: 0.5,
+  },
+  amount: { fontSize: 20, fontWeight: 'bold' },
+  date: { fontSize: 12 },
+  gstRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingTop: 8, borderTopWidth: 0.5,
+  },
+  gstText: { fontSize: 11 },
+  empty: { justifyContent: 'center', alignItems: 'center', marginTop: 100 },
+  emptyText: { fontSize: 16 },
 });
