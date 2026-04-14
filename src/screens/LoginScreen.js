@@ -12,10 +12,12 @@ import VendorNetLogo from '../components/VendorNetLogo';
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState('mobile');
+  const [name, setName] = useState('');
+  const [step, setStep] = useState('mobile'); // mobile | otp | register
   const [loading, setLoading] = useState(false);
+  const [isNewUser, setIsNewUser] = useState(false);
   const { login } = useAuth();
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const c = theme.colors;
 
   const sendOTP = async () => {
@@ -41,13 +43,40 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      const res = await authAPI.verifyOTP(mobile, otp, 'retailer', 'Retailer User');
+      // Try login without role first — works for existing users
+      const res = await authAPI.verifyOTP(mobile, otp, null, null);
       await login(
         { token: res.data.token, refresh_token: res.data.refresh_token },
         res.data.user
       );
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Invalid OTP');
+      const errMsg = err.response?.data?.error || '';
+      if (errMsg.includes('Name and role required')) {
+        // New user — ask for name
+        setIsNewUser(true);
+        setStep('register');
+      } else {
+        Alert.alert('Error', errMsg || 'Invalid OTP');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerAndLogin = async () => {
+    if (!name.trim()) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await authAPI.verifyOTP(mobile, otp, 'retailer_admin', name.trim());
+      await login(
+        { token: res.data.token, refresh_token: res.data.refresh_token },
+        res.data.user
+      );
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -63,7 +92,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Top brand section */}
+        {/* Brand section */}
         <View style={[styles.brandSection, { backgroundColor: c.primary }]}>
           <View style={styles.logoWrap}>
             <VendorNetLogo size={100} />
@@ -77,24 +106,20 @@ export default function LoginScreen() {
         {/* Form section */}
         <View style={[styles.formSection, { backgroundColor: c.background }]}>
 
-          {step === 'mobile' ? (
+          {/* ── STEP 1: Mobile ── */}
+          {step === 'mobile' && (
             <>
-              <Text style={[styles.formTitle, { color: c.text }]}>
-                Welcome Back
-              </Text>
+              <Text style={[styles.formTitle, { color: c.text }]}>Welcome</Text>
               <Text style={[styles.formSubtitle, { color: c.textMuted }]}>
                 Sign in with your mobile number
               </Text>
 
-              <Text style={[styles.label, { color: c.textSecondary }]}>
-                Mobile Number
-              </Text>
+              <Text style={[styles.label, { color: c.textSecondary }]}>Mobile Number</Text>
               <View style={[styles.inputRow, {
-                backgroundColor: c.inputBackground,
-                borderColor: c.border,
+                backgroundColor: c.inputBackground, borderColor: c.border,
               }]}>
                 <View style={[styles.prefixBox, { borderRightColor: c.border }]}>
-                  <Text style={[styles.prefixFlag]}>🇮🇳</Text>
+                  <Text style={styles.prefixFlag}>🇮🇳</Text>
                   <Text style={[styles.prefix, { color: c.text }]}>+91</Text>
                 </View>
                 <TextInput
@@ -122,23 +147,21 @@ export default function LoginScreen() {
                 }
               </TouchableOpacity>
             </>
-          ) : (
+          )}
+
+          {/* ── STEP 2: OTP ── */}
+          {step === 'otp' && (
             <>
-              <Text style={[styles.formTitle, { color: c.text }]}>
-                Verify OTP
-              </Text>
+              <Text style={[styles.formTitle, { color: c.text }]}>Verify OTP</Text>
               <Text style={[styles.formSubtitle, { color: c.textMuted }]}>
                 Sent to +91 {mobile}
               </Text>
 
-              <Text style={[styles.label, { color: c.textSecondary }]}>
-                Enter OTP
-              </Text>
+              <Text style={[styles.label, { color: c.textSecondary }]}>Enter OTP</Text>
               <TextInput
                 style={[styles.otpInput, {
                   backgroundColor: c.inputBackground,
-                  borderColor: c.border,
-                  color: c.text,
+                  borderColor: c.border, color: c.text,
                 }]}
                 placeholder="• • • • • •"
                 placeholderTextColor={c.placeholder}
@@ -146,6 +169,7 @@ export default function LoginScreen() {
                 maxLength={6}
                 value={otp}
                 onChangeText={setOtp}
+                autoFocus
               />
 
               <TouchableOpacity
@@ -166,17 +190,81 @@ export default function LoginScreen() {
                 style={styles.backRow}
                 onPress={() => { setStep('mobile'); setOtp(''); }}
               >
-                <Text style={[styles.backText, { color: c.textMuted }]}>
-                  ← Change number
-                </Text>
+                <Text style={[styles.backText, { color: c.textMuted }]}>← Change number</Text>
               </TouchableOpacity>
             </>
           )}
 
-          {/* Footer */}
-          <Text style={[styles.footer, { color: c.textMuted }]}>
-            For registered retailers only
-          </Text>
+          {/* ── STEP 3: Register (new user only) ── */}
+          {step === 'register' && (
+            <>
+              <Text style={[styles.formTitle, { color: c.text }]}>Create Account</Text>
+              <Text style={[styles.formSubtitle, { color: c.textMuted }]}>
+                Welcome! Let's set up your retailer account
+              </Text>
+
+              <Text style={[styles.label, { color: c.textSecondary }]}>Your Name / Business Name</Text>
+              <TextInput
+                style={[styles.otpInput, {
+                  backgroundColor: c.inputBackground,
+                  borderColor: c.border, color: c.text,
+                  letterSpacing: 0, fontSize: 16,
+                  textAlign: 'left', paddingHorizontal: 16,
+                }]}
+                placeholder="e.g. Ravi Kumar Traders"
+                placeholderTextColor={c.placeholder}
+                value={name}
+                onChangeText={setName}
+                autoFocus
+              />
+
+              {/* Role info */}
+              <View style={[styles.roleInfo, { backgroundColor: c.primaryLight }]}>
+                <Text style={styles.roleInfoIcon}>🏪</Text>
+                <View style={styles.roleInfoText}>
+                  <Text style={[styles.roleInfoTitle, { color: c.primary }]}>
+                    Retailer Account
+                  </Text>
+                  <Text style={[styles.roleInfoSub, { color: c.textMuted }]}>
+                    Browse products, place orders, track deliveries
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.btn, {
+                  backgroundColor: name.trim() ? c.primary : c.border,
+                }]}
+                onPress={registerAndLogin}
+                disabled={loading || !name.trim()}
+                activeOpacity={0.85}
+              >
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={styles.btnText}>Create Account →</Text>
+                }
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.backRow}
+                onPress={() => { setStep('mobile'); setOtp(''); setName(''); }}
+              >
+                <Text style={[styles.backText, { color: c.textMuted }]}>← Start over</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Role badge */}
+          <View style={[styles.roleBadge, { backgroundColor: c.surfaceSecondary }]}>
+            <Text style={styles.roleBadgeIcon}>
+              {step === 'register' ? '🆕' : '🔐'}
+            </Text>
+            <Text style={[styles.roleBadgeText, { color: c.textMuted }]}>
+              {step === 'register'
+                ? 'New retailer registration'
+                : 'Admin & staff login supported'}
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -187,48 +275,28 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { flexGrow: 1 },
 
-  // Brand top section
   brandSection: {
-    paddingTop: 64, paddingBottom: 40,
-    alignItems: 'center',
+    paddingTop: 64, paddingBottom: 40, alignItems: 'center',
   },
   logoWrap: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
-    marginBottom: 20,
-    borderRadius: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25, shadowRadius: 16,
+    elevation: 10, marginBottom: 20, borderRadius: 24,
   },
-  brandName: {
-    fontSize: 36, fontWeight: '800',
-    color: '#FFFFFF', letterSpacing: 0.5,
-  },
+  brandName: { fontSize: 36, fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.5 },
   brandTagline: {
     fontSize: 13, color: 'rgba(255,255,255,0.65)',
-    letterSpacing: 2, textTransform: 'uppercase',
-    marginTop: 6,
+    letterSpacing: 2, textTransform: 'uppercase', marginTop: 6,
   },
 
-  // Form section
   formSection: {
-    flex: 1, padding: 28,
-    paddingTop: 36, borderTopLeftRadius: 28,
-    borderTopRightRadius: 28, marginTop: -24,
+    flex: 1, padding: 28, paddingTop: 36,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -24,
   },
-  formTitle: {
-    fontSize: 24, fontWeight: '700', marginBottom: 6,
-  },
-  formSubtitle: {
-    fontSize: 14, marginBottom: 28,
-  },
-  label: {
-    fontSize: 13, fontWeight: '600',
-    marginBottom: 8, letterSpacing: 0.3,
-  },
+  formTitle: { fontSize: 24, fontWeight: '700', marginBottom: 6 },
+  formSubtitle: { fontSize: 14, marginBottom: 28 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 8, letterSpacing: 0.3 },
 
-  // Mobile input
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
     borderWidth: 1.5, borderRadius: 14,
@@ -243,7 +311,6 @@ const styles = StyleSheet.create({
   prefix: { fontSize: 15, fontWeight: '600' },
   input: { flex: 1, height: '100%', paddingHorizontal: 14, fontSize: 16 },
 
-  // OTP input
   otpInput: {
     borderWidth: 1.5, borderRadius: 14,
     height: 54, paddingHorizontal: 20,
@@ -251,21 +318,27 @@ const styles = StyleSheet.create({
     marginBottom: 20, textAlign: 'center',
   },
 
-  // Button
   btn: {
     borderRadius: 14, height: 54,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
   },
-  btnText: {
-    color: '#fff', fontSize: 16, fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   backRow: { alignItems: 'center', paddingVertical: 8 },
   backText: { fontSize: 14 },
-  footer: {
-    textAlign: 'center', fontSize: 12,
-    marginTop: 32, letterSpacing: 0.5,
+
+  roleInfo: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 12, padding: 14, gap: 12, marginBottom: 20,
   },
+  roleInfoIcon: { fontSize: 28 },
+  roleInfoText: { flex: 1 },
+  roleInfoTitle: { fontSize: 14, fontWeight: '700', marginBottom: 2 },
+  roleInfoSub: { fontSize: 12 },
+
+  roleBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, padding: 10, gap: 8, marginTop: 20,
+  },
+  roleBadgeIcon: { fontSize: 14 },
+  roleBadgeText: { fontSize: 12 },
 });

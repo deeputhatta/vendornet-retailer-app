@@ -280,7 +280,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Header
   header: { padding: 20, paddingTop: 48 },
   headerTop: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -289,10 +288,7 @@ const styles = StyleSheet.create({
   notifBtn: { fontSize: 22 },
   headerSub: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 4 },
 
-  // Filter
-  filterRow: {
-    flexDirection: 'row', borderBottomWidth: 1,
-  },
+  filterRow: { flexDirection: 'row', borderBottomWidth: 1 },
   filterBtn: {
     flex: 1, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 2,
@@ -301,7 +297,6 @@ const styles = StyleSheet.create({
 
   list: { padding: 12, paddingBottom: 24 },
 
-  // Order card
   orderCard: {
     borderRadius: 14, marginBottom: 12,
     overflow: 'hidden', elevation: 2,
@@ -321,7 +316,6 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   statusText: { fontSize: 11, fontWeight: '700' },
 
-  // Sub rows
   subRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 14,
@@ -340,7 +334,6 @@ const styles = StyleSheet.create({
   subStatusText: { fontSize: 10, fontWeight: '600' },
   subAmount: { fontSize: 11 },
 
-  // Track button
   trackBtn: {
     flexDirection: 'row', alignItems: 'center',
     marginHorizontal: 14, marginBottom: 10,
@@ -352,14 +345,12 @@ const styles = StyleSheet.create({
   trackBtnText: { flex: 1, fontSize: 13, fontWeight: '700' },
   trackBtnArrow: { fontSize: 14, fontWeight: '700' },
 
-  // View detail
   viewDetail: {
     borderTopWidth: 0.5, paddingVertical: 8,
     paddingHorizontal: 14, alignItems: 'center',
   },
   viewDetailText: { fontSize: 11 },
 
-  // Empty
   empty: { alignItems: 'center', marginTop: 80, paddingHorizontal: 32 },
   emptyEmoji: { fontSize: 56, marginBottom: 16 },
   emptyTitle: { fontSize: 20, fontWeight: '700', marginBottom: 8 },

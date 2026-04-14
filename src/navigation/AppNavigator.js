@@ -1,11 +1,11 @@
 import React from 'react';
-import { Platform } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePermissions } from '../context/PermissionContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -20,19 +20,22 @@ import WishlistScreen from '../screens/WishlistScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import InvoiceScreen from '../screens/InvoiceScreen';
 import CategoryScreen from '../screens/CategoryScreen';
+import StaffManagementScreen from '../screens/StaffManagementScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MoreScreen({ navigation }) {
   const { theme } = useTheme();
+  const { isAdmin } = usePermissions();
   const c = theme.colors;
 
   const moreItems = [
-    { icon: '❤️', label: 'Wishlist',      screen: 'Wishlist' },
-    { icon: '🧾', label: 'Invoices',      screen: 'Invoices' },
-    { icon: '🔔', label: 'Notifications', screen: 'Notifications' },
-    { icon: '👤', label: 'Profile',       screen: 'Profile' },
+    { icon: '❤️', label: 'Wishlist',       screen: 'Wishlist' },
+    { icon: '🧾', label: 'Invoices',        screen: 'Invoices' },
+    { icon: '🔔', label: 'Notifications',   screen: 'Notifications' },
+    ...(isAdmin ? [{ icon: '👥', label: 'Staff Management', screen: 'StaffManagement' }] : []),
+    { icon: '👤', label: 'Profile',         screen: 'Profile' },
   ];
 
   return (
@@ -66,6 +69,7 @@ function MoreScreen({ navigation }) {
 
 function HomeTabs() {
   const { theme } = useTheme();
+  const { can } = usePermissions();
   const c = theme.colors;
 
   return (
@@ -92,45 +96,51 @@ function HomeTabs() {
           headerShown: false,
         }}
       />
-      <Tab.Screen
-        name="Cart"
-        component={CartScreen}
-        options={{
-          tabBarLabel: 'Cart',
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>🛒</Text>,
-          headerShown: false,
-        }}
-      />
-      <Tab.Screen
-        name="Orders"
-        component={OrdersScreen}
-        options={{
-          tabBarLabel: 'Orders',
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>📦</Text>,
-          headerShown: false,
-        }}
-      />
-      <Tab.Screen
-        name="Analytics"
-        component={AnalyticsScreen}
-        options={{
-          tabBarLabel: 'Analytics',
-          tabBarIcon: () => <Text style={{ fontSize: 22 }}>📈</Text>,
-          headerShown: false,
-        }}
-      />
+      {can('place_orders') && (
+        <Tab.Screen
+          name="Cart"
+          component={CartScreen}
+          options={{
+            tabBarLabel: 'Cart',
+            tabBarIcon: () => <Text style={{ fontSize: 22 }}>🛒</Text>,
+            headerShown: false,
+          }}
+        />
+      )}
+      {can('view_orders') && (
+        <Tab.Screen
+          name="Orders"
+          component={OrdersScreen}
+          options={{
+            tabBarLabel: 'Orders',
+            tabBarIcon: () => <Text style={{ fontSize: 22 }}>📦</Text>,
+            headerShown: false,
+          }}
+        />
+      )}
+      {can('view_analytics') && (
+        <Tab.Screen
+          name="Analytics"
+          component={AnalyticsScreen}
+          options={{
+            tabBarLabel: 'Analytics',
+            tabBarIcon: () => <Text style={{ fontSize: 22 }}>📈</Text>,
+            headerShown: false,
+          }}
+        />
+      )}
       <Tab.Screen
         name="More"
         component={MoreScreen}
         options={{
           tabBarLabel: 'More',
           tabBarIcon: ({ color }) => (
-  <View style={{ gap: 4, alignItems: 'center', justifyContent: 'center' }}>
-    <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
-    <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
-    <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
-  </View>
-),
+            <View style={{ gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
+              <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
+              <View style={{ width: 18, height: 2, backgroundColor: color, borderRadius: 2 }} />
+            </View>
+          ),
           headerShown: false,
         }}
       />
@@ -190,6 +200,11 @@ function MainStack() {
       <Stack.Screen
         name="Profile"
         component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="StaffManagement"
+        component={StaffManagementScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
