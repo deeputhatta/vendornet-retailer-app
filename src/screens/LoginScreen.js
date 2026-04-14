@@ -9,13 +9,14 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import VendorNetLogo from '../components/VendorNetLogo';
 
+const ALLOWED_ROLES = ['retailer_admin', 'retailer_staff'];
+
 export default function LoginScreen() {
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
-  const [step, setStep] = useState('mobile'); // mobile | otp | register
+  const [step, setStep] = useState('mobile');
   const [loading, setLoading] = useState(false);
-  const [isNewUser, setIsNewUser] = useState(false);
   const { login } = useAuth();
   const { theme } = useTheme();
   const c = theme.colors;
@@ -43,8 +44,19 @@ export default function LoginScreen() {
     }
     setLoading(true);
     try {
-      // Try login without role first — works for existing users
       const res = await authAPI.verifyOTP(mobile, otp, null, null);
+      const userRole = res.data.user.role;
+
+      // Block non-retailer roles
+      if (!ALLOWED_ROLES.includes(userRole)) {
+        Alert.alert(
+          'Wrong App',
+          `This mobile is registered as ${userRole.replace(/_/g, ' ')}.\n\nPlease use the correct app.`,
+          [{ text: 'OK', onPress: () => { setStep('mobile'); setOtp(''); } }]
+        );
+        return;
+      }
+
       await login(
         { token: res.data.token, refresh_token: res.data.refresh_token },
         res.data.user
@@ -52,8 +64,6 @@ export default function LoginScreen() {
     } catch (err) {
       const errMsg = err.response?.data?.error || '';
       if (errMsg.includes('Name and role required')) {
-        // New user — ask for name
-        setIsNewUser(true);
         setStep('register');
       } else {
         Alert.alert('Error', errMsg || 'Invalid OTP');
@@ -146,6 +156,14 @@ export default function LoginScreen() {
                   : <Text style={styles.btnText}>Send OTP →</Text>
                 }
               </TouchableOpacity>
+
+              {/* Retailer only badge */}
+              <View style={[styles.infoBadge, { backgroundColor: c.primaryLight }]}>
+                <Text style={styles.infoBadgeIcon}>🏪</Text>
+                <Text style={[styles.infoBadgeText, { color: c.primary }]}>
+                  For retailers & retailer staff only
+                </Text>
+              </View>
             </>
           )}
 
@@ -203,13 +221,13 @@ export default function LoginScreen() {
                 Welcome! Let's set up your retailer account
               </Text>
 
-              <Text style={[styles.label, { color: c.textSecondary }]}>Your Name / Business Name</Text>
+              <Text style={[styles.label, { color: c.textSecondary }]}>
+                Your Name / Business Name
+              </Text>
               <TextInput
-                style={[styles.otpInput, {
+                style={[styles.nameInput, {
                   backgroundColor: c.inputBackground,
                   borderColor: c.border, color: c.text,
-                  letterSpacing: 0, fontSize: 16,
-                  textAlign: 'left', paddingHorizontal: 16,
                 }]}
                 placeholder="e.g. Ravi Kumar Traders"
                 placeholderTextColor={c.placeholder}
@@ -218,7 +236,6 @@ export default function LoginScreen() {
                 autoFocus
               />
 
-              {/* Role info */}
               <View style={[styles.roleInfo, { backgroundColor: c.primaryLight }]}>
                 <Text style={styles.roleInfoIcon}>🏪</Text>
                 <View style={styles.roleInfoText}>
@@ -254,11 +271,9 @@ export default function LoginScreen() {
             </>
           )}
 
-          {/* Role badge */}
+          {/* Footer badge */}
           <View style={[styles.roleBadge, { backgroundColor: c.surfaceSecondary }]}>
-            <Text style={styles.roleBadgeIcon}>
-              {step === 'register' ? '🆕' : '🔐'}
-            </Text>
+            <Text style={styles.roleBadgeIcon}>🔐</Text>
             <Text style={[styles.roleBadgeText, { color: c.textMuted }]}>
               {step === 'register'
                 ? 'New retailer registration'
@@ -318,6 +333,12 @@ const styles = StyleSheet.create({
     marginBottom: 20, textAlign: 'center',
   },
 
+  nameInput: {
+    borderWidth: 1.5, borderRadius: 14,
+    height: 54, paddingHorizontal: 16,
+    fontSize: 16, marginBottom: 20,
+  },
+
   btn: {
     borderRadius: 14, height: 54,
     justifyContent: 'center', alignItems: 'center', marginBottom: 16,
@@ -325,6 +346,13 @@ const styles = StyleSheet.create({
   btnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   backRow: { alignItems: 'center', paddingVertical: 8 },
   backText: { fontSize: 14 },
+
+  infoBadge: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, padding: 12, gap: 8, marginTop: 8,
+  },
+  infoBadgeIcon: { fontSize: 16 },
+  infoBadgeText: { fontSize: 13, fontWeight: '600' },
 
   roleInfo: {
     flexDirection: 'row', alignItems: 'center',
