@@ -7,6 +7,16 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { addToWishlist, removeFromWishlist, isInWishlist } from './WishlistScreen';
 
+const getAttributes = (attrs) => {
+  try {
+    if (!attrs) return [];
+    const parsed = typeof attrs === 'string' ? JSON.parse(attrs) : attrs;
+    return Object.entries(parsed);
+  } catch {
+    return [];
+  }
+};
+
 export default function ProductDetailScreen({ route, navigation }) {
   const { listing } = route.params;
   const [quantity, setQuantity] = useState(listing.min_order_qty);
@@ -84,7 +94,6 @@ export default function ProductDetailScreen({ route, navigation }) {
         <Text style={styles.brand}>{listing.brand_name}</Text>
         <Text style={styles.category}>{listing.category_name}</Text>
 
-        {/* Wholesaler name in header */}
         <View style={[styles.wholesalerBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
           <Text style={styles.wholesalerBadgeText}>
             🏪 {listing.wholesaler_name}
@@ -115,15 +124,14 @@ export default function ProductDetailScreen({ route, navigation }) {
         <DetailRow label="Brand" value={listing.brand_name} colors={c} />
         <DetailRow label="Category" value={listing.category_name} colors={c} />
         <DetailRow label="HSN Code" value={listing.hsn_code} colors={c} />
-        {listing.attributes &&
-          Object.entries(JSON.parse(listing.attributes)).map(([k, v]) => (
-            <DetailRow
-              key={k}
-              label={k.replace(/_/g, ' ')}
-              value={String(v)}
-              colors={c}
-            />
-          ))}
+        {getAttributes(listing.attributes).map(([k, v]) => (
+          <DetailRow
+            key={k}
+            label={k.replace(/_/g, ' ')}
+            value={String(v)}
+            colors={c}
+          />
+        ))}
       </View>
 
       {/* Seller Details */}
@@ -207,7 +215,6 @@ function DetailRow({ label, value, colors: c }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  // Header
   header: { padding: 20, paddingTop: 48 },
   headerTop: {
     flexDirection: 'row', justifyContent: 'space-between',
@@ -226,7 +233,6 @@ const styles = StyleSheet.create({
   },
   wholesalerBadgeText: { fontSize: 12, color: '#FFFFFF', fontWeight: '500' },
 
-  // Cards
   card: {
     margin: 12, marginTop: 12, borderRadius: 12,
     padding: 16, elevation: 1,
@@ -248,7 +254,6 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 13, textTransform: 'capitalize' },
   detailValue: { fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
 
-  // Qty
   qtyRow: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', marginBottom: 12,
@@ -262,7 +267,6 @@ const styles = StyleSheet.create({
   totalText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
   moqWarning: { fontSize: 12, textAlign: 'center', marginTop: 4 },
 
-  // Buttons
   btnRow: {
     flexDirection: 'row', gap: 10,
     marginHorizontal: 16, marginTop: 4,

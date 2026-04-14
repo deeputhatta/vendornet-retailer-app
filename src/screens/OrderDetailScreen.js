@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert
 } from 'react-native';
-import { ordersAPI } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
 
@@ -62,7 +61,6 @@ export default function OrderDetailScreen({ route, navigation }) {
                   min_order_qty: item.min_order_qty,
                 }))
               );
-              // Navigate to cart with first item
               navigation.navigate('Main', {
                 screen: 'Cart',
                 params: { item: allItems[0], reorderItems: allItems }
@@ -77,6 +75,69 @@ export default function OrderDetailScreen({ route, navigation }) {
       ]
     );
   };
+
+  const cancelOrder = () => {
+    const cancellable = order.sub_orders?.some(s =>
+      ['pending', 'accepted'].includes(s.status)
+    );
+    const hasDispatched = order.sub_orders?.some(s =>
+      ['packing', 'dispatched', 'delivered', 'completed', 'invoice_uploaded'].includes(s.status)
+    );
+    const allDone = order.sub_orders?.every(s =>
+      ['delivered', 'completed', 'invoice_uploaded', 'dispatched', 'packing'].includes(s.status)
+    );
+
+    if (allDone && !cancellable) {
+      Alert.alert(
+        '❌ Cannot Cancel',
+        'This order cannot be cancelled as it has already been packed, shipped or delivered.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    if (!cancellable) {
+      Alert.alert(
+        '❌ Cannot Cancel',
+        'This order cannot be cancelled at this stage.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Cancel Order',
+      hasDispatched
+        ? 'Some items are already dispatched and cannot be cancelled. Only pending/accepted items will be cancelled. Continue?'
+        : 'Are you sure you want to cancel this order? This action cannot be undone.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await api.put(`/orders/${orderId}/cancel`, {
+                reason: 'Cancelled by retailer'
+              });
+              Alert.alert(
+                '✓ Cancelled',
+                `${res.data.cancelled} item(s) cancelled successfully.`,
+                [{ text: 'OK', onPress: () => loadOrder() }]
+              );
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.error || 'Failed to cancel order');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Check if any sub order is cancellable
+  const hasCancellable = order?.sub_orders?.some(s =>
+    ['pending', 'accepted'].includes(s.status)
+  );
 
   if (loading) return (
     <View style={[styles.loading, { backgroundColor: c.background }]}>
@@ -115,17 +176,29 @@ export default function OrderDetailScreen({ route, navigation }) {
 
       <View style={styles.content}>
 
-        {/* Reorder button */}
-        <TouchableOpacity
-          style={[styles.reorderBtn, { backgroundColor: c.primary }]}
-          onPress={reorder}
-          disabled={reordering}
-        >
-          <Text style={styles.reorderIcon}>🔄</Text>
-          <Text style={styles.reorderText}>
-            {reordering ? 'Adding to cart...' : 'Reorder All Items'}
-          </Text>
-        </TouchableOpacity>
+        {/* Action buttons */}
+        <View style={styles.actionBtnsRow}>
+          <TouchableOpacity
+            style={[styles.reorderBtn, { backgroundColor: c.primary }]}
+            onPress={reorder}
+            disabled={reordering}
+          >
+            <Text style={styles.reorderIcon}>🔄</Text>
+            <Text style={styles.reorderText}>
+              {reordering ? 'Adding...' : 'Reorder'}
+            </Text>
+          </TouchableOpacity>
+
+          {hasCancellable && (
+            <TouchableOpacity
+              style={[styles.cancelBtn, { backgroundColor: '#2A0A0A', borderColor: '#FF453A' }]}
+              onPress={cancelOrder}
+            >
+              <Text style={styles.cancelIcon}>✕</Text>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Delivery address */}
         <View style={[styles.card, { backgroundColor: c.surface }]}>
@@ -195,9 +268,7 @@ export default function OrderDetailScreen({ route, navigation }) {
 
               {/* Sub order total */}
               <View style={[styles.subTotal, { borderTopColor: c.borderLight }]}>
-                <Text style={[styles.subTotalLabel, { color: c.textMuted }]}>
-                  Subtotal
-                </Text>
+                <Text style={[styles.subTotalLabel, { color: c.textMuted }]}>Subtotal</Text>
                 <Text style={[styles.subTotalValue, { color: c.primary }]}>
                   ₹{parseFloat(sub.total_amount).toLocaleString('en-IN')}
                 </Text>
@@ -263,12 +334,24 @@ const styles = StyleSheet.create({
 
   content: { padding: 16 },
 
-  reorderBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 14, height: 52, gap: 10, marginBottom: 16,
+  actionBtnsRow: {
+    flexDirection: 'row', gap: 10, marginBottom: 16,
   },
-  reorderIcon: { fontSize: 18 },
-  reorderText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  reorderBtn: {
+    flex: 1, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 14, height: 52, gap: 8,
+  },
+  reorderIcon: { fontSize: 16 },
+  reorderText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  cancelBtn: {
+    flex: 1, flexDirection: 'row',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 14, height: 52, gap: 8,
+    borderWidth: 1,
+  },
+  cancelIcon: { fontSize: 16, color: '#FF453A' },
+  cancelText: { color: '#FF453A', fontSize: 14, fontWeight: '700' },
 
   card: {
     borderRadius: 16, marginBottom: 14,

@@ -11,14 +11,16 @@ const NOTIF_KEY = '@vendornet_notifications';
 export async function saveNotification(title, body, data = {}) {
   try {
     const existing = await AsyncStorage.getItem(NOTIF_KEY);
-    const list = existing ? JSON.parse(existing) : [];
+    let list = [];
+    if (existing) {
+      try { list = JSON.parse(existing); } catch { list = []; }
+    }
     list.unshift({
       id: Date.now().toString(),
       title, body, data,
       read: false,
       created_at: new Date().toISOString(),
     });
-    // Keep last 50 notifications
     await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(list.slice(0, 50)));
   } catch {}
 }
@@ -42,9 +44,11 @@ export default function NotificationsScreen({ navigation }) {
   const loadNotifications = async () => {
     try {
       const existing = await AsyncStorage.getItem(NOTIF_KEY);
-      const list = existing ? JSON.parse(existing) : [];
+      let list = [];
+      if (existing) {
+        try { list = JSON.parse(existing); } catch { list = []; }
+      }
       setNotifications(list);
-      // Mark all as read
       const updated = list.map(n => ({ ...n, read: true }));
       await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
     } catch {}
