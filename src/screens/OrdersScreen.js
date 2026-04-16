@@ -17,6 +17,7 @@ const STATUS_COLORS = {
   completed:          { bg: '#003A10', text: '#30D158' },
   rejected:           { bg: '#2A0A0A', text: '#FF453A' },
   auto_cancelled:     { bg: '#2A1500', text: '#FF9500' },
+  cancelled:          { bg: '#2A1500', text: '#FF9500' },
 };
 
 const getStatusColor = (status) =>
@@ -33,13 +34,16 @@ const STATUS_LABELS = {
   completed:          'Completed',
   rejected:           'Rejected',
   auto_cancelled:     'Cancelled',
+  cancelled:          'Cancelled',
 };
+
+const CANCELLED_STATUSES = ['rejected', 'auto_cancelled', 'cancelled'];
 
 export default function OrdersScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('active');
   const { theme } = useTheme();
   const c = theme.colors;
 
@@ -65,6 +69,9 @@ export default function OrdersScreen({ navigation }) {
     if (filter === 'delivered') return order.sub_orders?.some(s =>
       ['delivered', 'completed', 'invoice_uploaded'].includes(s.status)
     );
+    if (filter === 'cancelled') return order.sub_orders?.every(s =>
+      CANCELLED_STATUSES.includes(s.status)
+    );
     return true;
   });
 
@@ -73,6 +80,8 @@ export default function OrdersScreen({ navigation }) {
     const statuses = sub_orders.map(s => s.status);
     if (statuses.every(s => ['delivered', 'completed', 'invoice_uploaded'].includes(s)))
       return 'delivered';
+    if (statuses.every(s => CANCELLED_STATUSES.includes(s)))
+      return 'auto_cancelled';
     if (statuses.some(s => s === 'dispatched')) return 'dispatched';
     if (statuses.some(s => s === 'packing')) return 'packing';
     if (statuses.some(s => s === 'accepted')) return 'accepted';
@@ -200,6 +209,13 @@ export default function OrdersScreen({ navigation }) {
     </View>
   );
 
+  const tabs = [
+    { key: 'active',    label: 'Active' },
+    { key: 'delivered', label: 'Delivered' },
+    { key: 'cancelled', label: 'Cancelled' },
+    { key: 'all',       label: 'All' },
+  ];
+
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
 
@@ -220,11 +236,7 @@ export default function OrdersScreen({ navigation }) {
       <View style={[styles.filterRow, {
         backgroundColor: c.surface, borderBottomColor: c.border,
       }]}>
-        {[
-          { key: 'all', label: 'All' },
-          { key: 'active', label: 'Active' },
-          { key: 'delivered', label: 'Delivered' },
-        ].map(f => (
+        {tabs.map(f => (
           <TouchableOpacity
             key={f.key}
             style={[styles.filterBtn, {
@@ -259,16 +271,25 @@ export default function OrdersScreen({ navigation }) {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>📦</Text>
-            <Text style={[styles.emptyTitle, { color: c.text }]}>No orders yet</Text>
-            <Text style={[styles.emptySub, { color: c.textMuted }]}>
-              Your orders will appear here
+            <Text style={[styles.emptyTitle, { color: c.text }]}>
+              {filter === 'cancelled' ? 'No cancelled orders' :
+               filter === 'active'    ? 'No active orders' :
+               filter === 'delivered' ? 'No delivered orders' :
+               'No orders yet'}
             </Text>
-            <TouchableOpacity
-              style={[styles.shopBtn, { backgroundColor: c.primary }]}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.shopBtnText}>Start Shopping →</Text>
-            </TouchableOpacity>
+            <Text style={[styles.emptySub, { color: c.textMuted }]}>
+              {filter === 'active'
+                ? 'Your active orders will appear here'
+                : 'Your orders will appear here'}
+            </Text>
+            {filter === 'active' && (
+              <TouchableOpacity
+                style={[styles.shopBtn, { backgroundColor: c.primary }]}
+                onPress={() => navigation.navigate('Home')}
+              >
+                <Text style={styles.shopBtnText}>Start Shopping →</Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
