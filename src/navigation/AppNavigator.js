@@ -6,6 +6,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { usePermissions } from '../context/PermissionContext';
+import { CartProvider } from '../context/CartContext';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -232,7 +233,8 @@ export default function AppNavigator() {
   };
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <CartProvider>
+      <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <Stack.Screen name="MainStack" component={MainStack} />
@@ -241,6 +243,7 @@ export default function AppNavigator() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+      </CartProvider>
   );
 }
 
