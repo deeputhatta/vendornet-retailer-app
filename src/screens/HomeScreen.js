@@ -1,47 +1,119 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity,
-  StyleSheet, ActivityIndicator, ScrollView, StatusBar
+  StyleSheet, ActivityIndicator, ScrollView, StatusBar,
+  Dimensions
 } from 'react-native';
+import AsyncStorageLib from '@react-native-async-storage/async-storage';
 import { searchAPI, catalogueAPI } from '../services/api';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import VendorNetLogo from '../components/VendorNetLogo';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
+const CATEGORY_ICONS = {
+  'cement': '🏗', 'steel-tmt': '⚙️', 'paint': '🎨',
+  'electrical': '⚡', 'plumbing': '🔧', 'hardware': '🔨',
+  'tiles': '🪟', 'power-tools': '🔌', 'wood': '🪵',
+};
+const getCategoryEmoji = (slug) => CATEGORY_ICONS[slug] || '📦';
+
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
+const RECENTLY_VIEWED_KEY = 'recently_viewed_listings';
+
 export default function HomeScreen({ navigation }) {
   const [query, setQuery] = useState('');
   const [categories, setCategories] = useState([]);
+  const [myCategories, setMyCategories] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState(null);
+  const [offers, setOffers] = useState([]);
+  const [newArrivals, setNewArrivals] = useState([]);
+  const [topSellers, setTopSellers] = useState([]);
+  const [spotlight, setSpotlight] = useState(null);
+  const [recentlyViewed, setRecentlyViewed] = useState([]);
   const { user } = useAuth();
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const c = theme.colors;
 
   useEffect(() => {
-    loadCategories();
-    loadStats();
+    loadAll();
+    loadRecentlyViewed();
   }, []);
 
-  const loadCategories = async () => {
+  const loadRecentlyViewed = async () => {
     try {
-      const res = await catalogueAPI.getCategories();
-      setCategories(res.data.categories);
+      const data = await AsyncStorageLib.getItem(RECENTLY_VIEWED_KEY);
+      if (data) setRecentlyViewed(JSON.parse(data));
     } catch (err) { console.error(err); }
   };
 
-  const loadStats = async () => {
+  const saveRecentlyViewed = async (listing) => {
     try {
-      const res = await api.get('/orders/retailer-analytics');
-      setStats({
-        totalSpent: res.data.summary?.total_spend || 0,
-        totalOrders: res.data.summary?.total_orders || 0,
-        topItem: res.data.top_items?.[0]?.generic_name || '—',
-      });
-    } catch (err) {
-      console.error(err);
-    }
+      const data = await AsyncStorageLib.getItem(RECENTLY_VIEWED_KEY);
+      let items = data ? JSON.parse(data) : [];
+      items = items.filter(i => i.listing_id !== listing.listing_id);
+      items.unshift(listing);
+      items = items.slice(0, 5);
+      await AsyncStorageLib.setItem(RECENTLY_VIEWED_KEY, JSON.stringify(items));
+      setRecentlyViewed(items);
+    } catch (err) { console.error(err); }
+  };
+
+  const navigateToProduct = (listing) => {
+    saveRecentlyViewed({
+      listing_id: listing.listing_id,
+      generic_name: listing.generic_name,
+      brand_name: listing.brand_name,
+      wholesaler_name: listing.wholesaler_name,
+      wholesaler_id: listing.wholesaler_id,
+      effective_price: listing.effective_price || listing.offer_price || listing.price,
+      price: listing.price,
+      offer_price: listing.offer_price,
+      has_offer: !!(listing.offer_price),
+      min_order_qty: listing.min_order_qty,
+      category_name: listing.category_name,
+    });
+    navigation.navigate('ProductDetail', {
+      listing: {
+        ...listing,
+        effective_price: listing.effective_price || listing.offer_price || listing.price,
+        has_offer: !!(listing.offer_price),
+      }
+    });
+  };
+
+  const loadAll = async () => {
+    try {
+      const [catRes, myRes, statsRes, offersRes, newRes, topRes, spotRes] = await Promise.allSettled([
+        catalogueAPI.getCategories(),
+        api.get('/categories/my'),
+        api.get('/orders/retailer-analytics'),
+        api.get('/listings/?has_offer=true&limit=10'),
+        api.get('/listings/?new_arrivals=true&days=7&limit=8'),
+        api.get('/orders/top-products?limit=5'),
+        api.get('/orders/wholesaler-spotlight'),
+      ]);
+      if (catRes.status === 'fulfilled') setCategories(catRes.value.data.categories || []);
+      if (myRes.status === 'fulfilled') setMyCategories(myRes.value.data.categories?.map(cat => cat.category_id) || []);
+      if (statsRes.status === 'fulfilled') {
+        const d = statsRes.value.data;
+        setStats({ totalSpent: d.summary?.total_spend || 0, totalOrders: d.summary?.total_orders || 0, topItem: d.top_items?.[0]?.generic_name || '—' });
+      }
+      if (offersRes.status === 'fulfilled') setOffers((offersRes.value.data.listings || []).filter(l => l.offer_price));
+      if (newRes.status === 'fulfilled') setNewArrivals(newRes.value.data.listings || []);
+      if (topRes.status === 'fulfilled') setTopSellers(topRes.value.data.products || []);
+      if (spotRes.status === 'fulfilled') setSpotlight(spotRes.value.data.wholesaler);
+    } catch (err) { console.error(err); }
   };
 
   const handleSearch = async (q) => {
@@ -49,63 +121,84 @@ export default function HomeScreen({ navigation }) {
     if (q.length < 2) { setResults([]); return; }
     setLoading(true);
     try {
-      const res = await searchAPI.search(q);
+      const categoryFilter = myCategories.length > 0 ? { category_ids: myCategories.join(',') } : {};
+      const res = await searchAPI.search(q, categoryFilter);
       setResults(res.data.results.grouped_hits || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
-  const renderProduct = ({ item }) => {
+  const activeCategories = (categories || []).filter(cat => cat && myCategories.includes(cat.category_id));
+  const otherCategories = (categories || []).filter(cat => cat && !myCategories.includes(cat.category_id));
+  const hasMapping = myCategories.length > 0;
+
+  const SectionHeader = ({ title, subtitle, onPress, actionLabel }) => (
+    <View style={styles.sectionHeader}>
+      <View>
+        <Text style={[styles.sectionTitle, { color: c.text }]}>{title}</Text>
+        {subtitle && <Text style={[styles.sectionSub, { color: c.textMuted }]}>{subtitle}</Text>}
+      </View>
+      {onPress && (
+        <TouchableOpacity onPress={onPress} style={[styles.seeAllBtn, { backgroundColor: c.primaryLight }]}>
+          <Text style={[styles.seeAllText, { color: c.primary }]}>{actionLabel || 'See all →'}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const ListingCard = ({ item, width, onPress }) => {
+    const discount = item.offer_price ? Math.round(((item.price - item.offer_price) / item.price) * 100) : 0;
+    return (
+      <TouchableOpacity
+        style={[styles.listingCard, { backgroundColor: c.surface, borderColor: c.border, width: width || SCREEN_W * 0.52 }]}
+        onPress={onPress}
+        activeOpacity={0.8}>
+        {discount > 0 && (
+          <View style={styles.discountBadge}>
+            <Text style={styles.discountText}>{discount}% OFF</Text>
+          </View>
+        )}
+        <Text style={[styles.lcProduct, { color: c.text }]} numberOfLines={2}>{item.generic_name}</Text>
+        <Text style={[styles.lcBrand, { color: c.primary }]}>{item.brand_name}</Text>
+        <Text style={[styles.lcWholesaler, { color: c.textMuted }]} numberOfLines={1}>🏪 {item.wholesaler_name}</Text>
+        <View style={styles.lcPriceRow}>
+          {item.offer_price && <Text style={[styles.lcOldPrice, { color: c.textMuted }]}>₹{item.price}</Text>}
+          <Text style={[styles.lcPrice, { color: item.offer_price ? '#1D9E75' : c.primary }]}>
+            ₹{item.offer_price || item.price}
+          </Text>
+        </View>
+        <Text style={[styles.lcMoq, { color: c.textMuted }]}>Min {item.min_order_qty} units</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSearchProduct = ({ item }) => {
     const doc = item.hits[0]?.document;
     if (!doc) return null;
     return (
       <TouchableOpacity
         style={[styles.productCard, { backgroundColor: c.surface, shadowColor: c.text }]}
-        onPress={() => navigation.navigate('ProductDetail', {
-          listing: {
-            ...doc,
-            effective_price: doc.effective_price || doc.price,
-            has_offer: doc.has_offer || false,
-          }
-        })}
-        activeOpacity={0.8}
-      >
+        onPress={() => navigateToProduct(doc)}
+        activeOpacity={0.8}>
         <View style={[styles.accentBar, { backgroundColor: c.primary }]} />
         <View style={styles.productInfo}>
-          <Text style={[styles.productName, { color: c.text }]} numberOfLines={2}>
-            {doc.generic_name}
-          </Text>
-          <Text style={[styles.productBrand, { color: c.primary }]}>
-            {doc.brand_name}
-          </Text>
-          {/* Wholesaler name */}
+          <Text style={[styles.productName, { color: c.text }]} numberOfLines={2}>{doc.generic_name}</Text>
+          <Text style={[styles.productBrand, { color: c.primary }]}>{doc.brand_name}</Text>
           <View style={styles.wholesalerRow}>
             <Text style={styles.wholesalerIcon}>🏪</Text>
-            <Text style={[styles.wholesalerName, { color: c.textMuted }]} numberOfLines={1}>
-              {doc.wholesaler_name}
-            </Text>
+            <Text style={[styles.wholesalerName, { color: c.textMuted }]} numberOfLines={1}>{doc.wholesaler_name}</Text>
           </View>
           <View style={[styles.categoryPill, { backgroundColor: c.primaryLight }]}>
-            <Text style={[styles.categoryPillText, { color: c.primary }]}>
-              {doc.category_name}
-            </Text>
+            <Text style={[styles.categoryPillText, { color: c.primary }]}>{doc.category_name}</Text>
           </View>
         </View>
         <View style={styles.priceBox}>
-          {doc.has_offer && (
-            <Text style={[styles.oldPrice, { color: c.textMuted }]}>₹{doc.price}</Text>
-          )}
+          {doc.has_offer && <Text style={[styles.oldPrice, { color: c.textMuted }]}>₹{doc.price}</Text>}
           <Text style={[styles.price, { color: c.primary }]}>₹{doc.effective_price}</Text>
-          <Text style={[styles.moq, { color: c.textMuted }]}>
-            Min {doc.min_order_qty} units
-          </Text>
-          <View style={[styles.stockBadge, {
-            backgroundColor: doc.stock_qty > 0 ? '#003A10' : '#2A0A0A',
-          }]}>
-            <Text style={[styles.stockText, {
-              color: doc.stock_qty > 0 ? '#30D158' : '#FF453A',
-            }]}>
-              {doc.stock_qty > 0 ? '✓ In Stock' : '✕ Out'}
+          <Text style={[styles.moq, { color: c.textMuted }]}>Min {doc.min_order_qty}</Text>
+          <View style={[styles.stockBadge, { backgroundColor: doc.stock_qty > 0 ? '#003A10' : '#2A0A0A' }]}>
+            <Text style={[styles.stockText, { color: doc.stock_qty > 0 ? '#30D158' : '#FF453A' }]}>
+              {doc.stock_qty > 0 ? '✓ In Stock' : '✗ Out'}
             </Text>
           </View>
         </View>
@@ -117,148 +210,201 @@ export default function HomeScreen({ navigation }) {
     <View style={[styles.container, { backgroundColor: c.background }]}>
       <StatusBar barStyle="light-content" backgroundColor="#185FA5" />
 
-      {/* ── SECTION 1: Brand ── */}
-      <View style={[styles.brandSection, { backgroundColor: c.primary }]}>
-        <View style={styles.brandInner}>
-          <View style={styles.logoBox}>
-            <VendorNetLogo size={64} />
+      {/* HEADER */}
+      <View style={[styles.header, { backgroundColor: c.primary }]}>
+        <View style={styles.headerRow}>
+          <VendorNetLogo size={38} />
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.greeting}>{getGreeting()}, {user?.name?.split(' ')[0] || 'there'} 👋</Text>
+            <Text style={styles.subGreeting}>What do you need today?</Text>
           </View>
-          <View style={styles.brandTextBlock}>
-            <Text style={styles.brandName}>
-              <Text style={{ color: '#FFFFFF' }}>Vendor</Text>
-              <Text style={{ color: '#F2C94C' }}>Net</Text>
-            </Text>
-            <Text style={styles.brandTagline}>B2B Wholesale Marketplace</Text>
-          </View>
-          {/* Notification bell */}
-          <TouchableOpacity
-            style={styles.notifBtn}
-            onPress={() => navigation.navigate('Notifications')}
-          >
-            <Text style={styles.notifIcon}>🔔</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')} style={styles.notifBtn}>
+            <Text style={{ fontSize: 22 }}>🔔</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      {/* ── SECTION 2: Greeting + Search ── */}
-      <View style={[styles.greetSection, { backgroundColor: c.primary }]}>
-        <View style={[styles.greetInner, { backgroundColor: c.surface }]}>
-          <View style={styles.greetTop}>
-            <Text style={[styles.greeting, { color: c.text }]}>
-              Hello, {user?.name?.split(' ')[0] || 'there'} 👋
-            </Text>
-            <Text style={[styles.greetSubtitle, { color: c.textMuted }]}>
-              What do you need today?
-            </Text>
-          </View>
-          <View style={[styles.searchBox, {
-            backgroundColor: c.inputBackground,
-            borderColor: c.border,
-            borderWidth: 1,
-          }]}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={[styles.searchInput, { color: c.text }]}
-              placeholder="Search cement, steel, paint..."
-              placeholderTextColor={c.placeholder}
-              value={query}
-              onChangeText={handleSearch}
-            />
-            {loading
-              ? <ActivityIndicator size="small" color={c.primary} />
-              : query.length > 0 && (
-                <TouchableOpacity onPress={() => handleSearch('')}>
-                  <Text style={{ fontSize: 14, color: c.textMuted }}>✕</Text>
-                </TouchableOpacity>
-              )
-            }
-          </View>
+        <View style={[styles.searchBox, { backgroundColor: c.surface }]}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={[styles.searchInput, { color: c.text }]}
+            placeholder="Search cement, steel, paint..."
+            placeholderTextColor={c.placeholder}
+            value={query}
+            onChangeText={handleSearch}
+          />
+          {loading
+            ? <ActivityIndicator size="small" color={c.primary} />
+            : query.length > 0 && (
+              <TouchableOpacity onPress={() => handleSearch('')}>
+                <Text style={{ fontSize: 14, color: c.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            )
+          }
         </View>
       </View>
 
-      {/* ── Content ── */}
       {query.length < 2 ? (
-        <ScrollView showsVerticalScrollIndicator={false}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
 
-          {/* ── LIVE STATS ── */}
+          {/* STATS */}
           <View style={styles.statsRow}>
-            <TouchableOpacity
-              style={[styles.statCard, { backgroundColor: '#0A1F35' }]}
-              onPress={() => navigation.navigate('Orders')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.statIcon}>📦</Text>
-              <Text style={[styles.statValue, { color: '#0A84FF' }]}>
-                {stats?.totalOrders ?? '—'}
-              </Text>
-              <Text style={[styles.statLabel, { color: '#0A84FF', opacity: 0.7 }]}>
-                Orders
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.statCard, { backgroundColor: '#2A1F00' }]}
-              onPress={() => navigation.navigate('Analytics')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.statIcon}>💰</Text>
-              <Text style={[styles.statValue, { color: '#F2C94C' }]}>
-                ₹{stats?.totalSpent >= 1000
-                  ? `${(stats.totalSpent / 1000).toFixed(1)}K`
-                  : stats?.totalSpent ?? '—'}
-              </Text>
-              <Text style={[styles.statLabel, { color: '#F2C94C', opacity: 0.7 }]}>
-                Total Spent
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.statCard, { backgroundColor: '#003A10' }]}
-              onPress={() => navigation.navigate('Analytics')}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.statIcon}>🔥</Text>
-              <Text
-                style={[styles.statValue, { color: '#30D158', fontSize: 13 }]}
-                numberOfLines={1}
-              >
-                {stats?.topItem ?? '—'}
-              </Text>
-              <Text style={[styles.statLabel, { color: '#30D158', opacity: 0.7 }]}>
-                Top Item
-              </Text>
-            </TouchableOpacity>
+            {[
+              { icon: '📦', value: stats?.totalOrders ?? '—', label: 'Orders', color: '#0A84FF', bg: '#0A1F35', screen: 'Orders' },
+              { icon: '💰', value: stats?.totalSpent >= 1000 ? `₹${(stats.totalSpent/1000).toFixed(1)}K` : `₹${stats?.totalSpent ?? 0}`, label: 'Spent', color: '#F2C94C', bg: '#2A1F00', screen: 'Analytics' },
+              { icon: '🔥', value: stats?.topItem ?? '—', label: 'Top Item', color: '#30D158', bg: '#003A10', screen: 'Analytics' },
+              { icon: '🧾', value: 'View', label: 'Invoices', color: '#BF5AF2', bg: '#1A0A2A', screen: 'Invoices' },
+            ].map((s, i) => (
+              <TouchableOpacity key={i} style={[styles.statCard, { backgroundColor: s.bg }]} onPress={() => navigation.navigate(s.screen)}>
+                <Text style={styles.statIcon}>{s.icon}</Text>
+                <Text style={[styles.statValue, { color: s.color, fontSize: s.label === 'Top Item' ? 11 : 13 }]} numberOfLines={1}>{s.value}</Text>
+                <Text style={[styles.statLabel, { color: s.color }]}>{s.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {/* ── SECTION HEADER ── */}
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: c.text }]}>
-              Browse Categories
-            </Text>
-            <Text style={[styles.sectionCount, { color: c.textMuted }]}>
-              {categories.length} categories
-            </Text>
+          {/* QUICK ACTIONS */}
+          <View style={[styles.quickActions, { backgroundColor: c.surface, borderColor: c.border }]}>
+            {[
+              { icon: '🛒', label: 'Cart', screen: 'Cart' },
+              { icon: '📋', label: 'Orders', screen: 'Orders' },
+              { icon: '❤️', label: 'Wishlist', screen: 'Wishlist' },
+              { icon: '👤', label: 'Profile', screen: 'Profile' },
+            ].map((a, i) => (
+              <TouchableOpacity key={i} style={styles.quickAction} onPress={() => navigation.navigate(a.screen)}>
+                <View style={[styles.quickActionIcon, { backgroundColor: c.primaryLight }]}>
+                  <Text style={{ fontSize: 20 }}>{a.icon}</Text>
+                </View>
+                <Text style={[styles.quickActionLabel, { color: c.textMuted }]}>{a.label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          {/* ── CATEGORY GRID ── */}
+          {/* OFFERS */}
+          {offers.length > 0 && (
+            <>
+              <SectionHeader title="🏷 Special Offers" subtitle={`${offers.length} deals available`} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+                {offers.map(item => (
+                  <ListingCard key={item.listing_id} item={item} onPress={() => navigateToProduct(item)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* RECENTLY VIEWED */}
+          {recentlyViewed.length > 0 && (
+            <>
+              <SectionHeader title="👁 Recently Viewed" subtitle="Your last 5 products" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+                {recentlyViewed.map(item => (
+                  <ListingCard key={item.listing_id} item={item} width={SCREEN_W * 0.44} onPress={() => navigateToProduct(item)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* NEW ARRIVALS */}
+          {newArrivals.length > 0 && (
+            <>
+              <SectionHeader title="✨ New Arrivals" subtitle="Added in last 7 days" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+                {newArrivals.map(item => (
+                  <ListingCard key={item.listing_id} item={item} onPress={() => navigateToProduct(item)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* TOP SELLERS */}
+          {topSellers.length > 0 && (
+            <>
+              <SectionHeader title="🔥 Top Sellers" subtitle="Most ordered products" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
+                {topSellers.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.listing_id}
+                    style={[styles.topSellerCard, { backgroundColor: c.surface, borderColor: c.border }]}
+                    onPress={() => navigateToProduct({ ...item, effective_price: item.offer_price || item.price, has_offer: !!item.offer_price })}
+                    activeOpacity={0.8}>
+                    <View style={styles.topSellerRank}>
+                      <Text style={styles.topSellerRankText}>#{i + 1}</Text>
+                    </View>
+                    <Text style={[styles.lcProduct, { color: c.text }]} numberOfLines={2}>{item.generic_name}</Text>
+                    <Text style={[styles.lcBrand, { color: c.primary }]}>{item.brand_name}</Text>
+                    <Text style={[styles.lcWholesaler, { color: c.textMuted }]} numberOfLines={1}>🏪 {item.wholesaler_name}</Text>
+                    <View style={styles.topSellerStats}>
+                      <Text style={[styles.topSellerStat, { color: '#30D158' }]}>📦 {item.total_sold} sold</Text>
+                      <Text style={[styles.lcPrice, { color: c.primary }]}>₹{item.offer_price || item.price}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {/* WHOLESALER SPOTLIGHT */}
+          {spotlight && (
+            <>
+              <SectionHeader title="🌟 Wholesaler Spotlight" />
+              <TouchableOpacity
+                style={[styles.spotlightCard, { backgroundColor: c.surface, borderColor: c.border }]}
+                onPress={() => navigation.navigate('Category', { wholesaler_id: spotlight.user_id, category: { name: spotlight.business_name || spotlight.name } })}
+                activeOpacity={0.8}>
+                <View style={styles.spotlightLeft}>
+                  <View style={[styles.spotlightAvatar, { backgroundColor: c.primary }]}>
+                    <Text style={styles.spotlightAvatarText}>{((spotlight.business_name || spotlight.name) || 'W').charAt(0)}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.spotlightName, { color: c.text }]}>{spotlight.business_name || spotlight.name}</Text>
+                    <View style={styles.spotlightMeta}>
+                      {spotlight.is_verified && <Text style={styles.verifiedBadge}>✓ Verified</Text>}
+                      <Text style={[styles.spotlightRating, { color: c.textMuted }]}>⭐ {spotlight.rating}</Text>
+                      <Text style={[styles.spotlightListings, { color: c.textMuted }]}>{spotlight.listing_count} products</Text>
+                    </View>
+                    {spotlight.categories?.length > 0 && (
+                      <Text style={[styles.spotlightCats, { color: c.textMuted }]} numberOfLines={1}>
+                        {spotlight.categories.join(' · ')}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <View style={[styles.browseBtn, { backgroundColor: c.primaryLight }]}>
+                  <Text style={[styles.browseBtnText, { color: c.primary }]}>Browse →</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* CATEGORIES */}
+          <SectionHeader
+            title="Browse Categories"
+            subtitle={hasMapping ? `${myCategories.length} active · others dimmed` : undefined}
+            onPress={() => navigation.navigate('CategoryPicker')}
+            actionLabel="✏ Edit"
+          />
           <View style={styles.categoryGrid}>
-            {categories.map(cat => (
+            {activeCategories.map(cat => (
               <TouchableOpacity
                 key={cat.category_id}
-                style={[styles.categoryCard, {
-                  backgroundColor: c.surface,
-                  shadowColor: c.text,
-                  borderColor: c.borderLight,
-                }]}
+                style={[styles.categoryCard, styles.categoryCardActive]}
                 onPress={() => navigation.navigate('Category', { category: cat })}
-                activeOpacity={0.8}
-              >
+                activeOpacity={0.8}>
+                <View style={[styles.emojiBox, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <Text style={styles.categoryEmoji}>{getCategoryEmoji(cat.slug)}</Text>
+                </View>
+                <Text style={[styles.categoryName, { color: '#fff' }]} numberOfLines={2}>{cat.name}</Text>
+                <View style={styles.activeDot} />
+              </TouchableOpacity>
+            ))}
+            {otherCategories.map(cat => (
+              <TouchableOpacity
+                key={cat.category_id}
+                style={[styles.categoryCard, { backgroundColor: c.surface, borderColor: c.borderLight, opacity: hasMapping ? 0.4 : 1 }]}
+                onPress={() => navigation.navigate('Category', { category: cat })}
+                activeOpacity={0.8}>
                 <View style={[styles.emojiBox, { backgroundColor: c.primaryLight }]}>
                   <Text style={styles.categoryEmoji}>{getCategoryEmoji(cat.slug)}</Text>
                 </View>
-                <Text style={[styles.categoryName, { color: c.text }]} numberOfLines={2}>
-                  {cat.name}
-                </Text>
+                <Text style={[styles.categoryName, { color: c.text }]} numberOfLines={2}>{cat.name}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -267,7 +413,7 @@ export default function HomeScreen({ navigation }) {
       ) : (
         <FlatList
           data={results}
-          renderItem={renderProduct}
+          renderItem={renderSearchProduct}
           keyExtractor={(_, i) => i.toString()}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.resultsList}
@@ -281,9 +427,7 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.emptySearch}>
                 <Text style={styles.emptyIcon}>🔍</Text>
                 <Text style={[styles.noResults, { color: c.text }]}>No results found</Text>
-                <Text style={[styles.noResultsSub, { color: c.textMuted }]}>
-                  Try a different search term
-                </Text>
+                <Text style={[styles.noResultsSub, { color: c.textMuted }]}>Try a different search term</Text>
               </View>
             )
           }
@@ -293,141 +437,97 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-const getCategoryEmoji = (slug) => {
-  const map = {
-    'cement': '🏗️', 'steel-tmt': '🔩', 'paint': '🎨',
-    'electrical': '⚡', 'plumbing': '🔧', 'hardware': '🔨',
-    'tiles': '🪟', 'wood': '🪵', 'glass': '🪞',
-  };
-  return map[slug] || '📦';
-};
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
-
-  // ── Section 1: Brand ──
-  brandSection: {
-    paddingTop: 48,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-  },
-  brandInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  logoBox: {
-    borderRadius: 16, overflow: 'hidden',
-    elevation: 6, shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25, shadowRadius: 6,
-  },
-  brandTextBlock: { flex: 1, justifyContent: 'center' },
-  brandName: { fontSize: 36, fontWeight: '800', letterSpacing: 0.5, lineHeight: 42 },
-  brandTagline: { fontSize: 12, color: 'rgba(255,255,255,0.6)', letterSpacing: 1, marginTop: 2 },
-  notifBtn: { padding: 8 },
-  notifIcon: { fontSize: 22 },
-
-  // ── Section 2: Greeting + Search ──
-  greetSection: { paddingBottom: 0 },
-  greetInner: {
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 20,
-    elevation: 4, shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.08, shadowRadius: 8,
-  },
-  greetTop: { marginBottom: 14 },
-  greeting: { fontSize: 18, fontWeight: '700', marginBottom: 3 },
-  greetSubtitle: { fontSize: 13 },
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 12, paddingHorizontal: 14,
-    height: 46, gap: 10,
-  },
-  searchIcon: { fontSize: 16 },
+  header: { paddingTop: 48, paddingBottom: 14, paddingHorizontal: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  greeting: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  subGreeting: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
+  notifBtn: { padding: 6 },
+  searchBox: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, paddingHorizontal: 12, height: 44, gap: 8 },
+  searchIcon: { fontSize: 15 },
   searchInput: { flex: 1, fontSize: 14, height: '100%' },
 
-  // ── Live Stats ──
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16, paddingTop: 16,
-    gap: 10,
-  },
-  statCard: {
-    flex: 1, borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center',
-    elevation: 1,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3,
-  },
-  statIcon: { fontSize: 20, marginBottom: 6 },
-  statValue: { fontSize: 15, fontWeight: '800' },
-  statLabel: { fontSize: 10, marginTop: 2, fontWeight: '600', textAlign: 'center' },
+  statsRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 12, gap: 8 },
+  statCard: { flex: 1, borderRadius: 12, paddingVertical: 11, alignItems: 'center' },
+  statIcon: { fontSize: 16, marginBottom: 3 },
+  statValue: { fontSize: 13, fontWeight: '800' },
+  statLabel: { fontSize: 9, marginTop: 1, fontWeight: '600', opacity: 0.8 },
 
-  // ── Section header ──
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16,
-    marginTop: 20, marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 17, fontWeight: '700' },
-  sectionCount: { fontSize: 12 },
+  quickActions: { flexDirection: 'row', marginHorizontal: 12, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 10 },
+  quickAction: { flex: 1, alignItems: 'center', gap: 5 },
+  quickActionIcon: { width: 42, height: 42, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+  quickActionLabel: { fontSize: 10, fontWeight: '600' },
 
-  // ── Categories ──
-  categoryGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    paddingHorizontal: 12, paddingBottom: 20,
-  },
-  categoryCard: {
-    width: '30%', margin: '1.5%',
-    borderRadius: 14, padding: 14,
-    alignItems: 'center', elevation: 1,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05, shadowRadius: 3,
-  },
-  emojiBox: {
-    width: 52, height: 52, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 10,
-  },
-  categoryEmoji: { fontSize: 26 },
-  categoryName: { fontSize: 11, textAlign: 'center', fontWeight: '600', lineHeight: 16 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, marginTop: 18, marginBottom: 10 },
+  sectionTitle: { fontSize: 15, fontWeight: '700' },
+  sectionSub: { fontSize: 10, marginTop: 1 },
+  seeAllBtn: { borderRadius: 7, paddingHorizontal: 9, paddingVertical: 4 },
+  seeAllText: { fontSize: 11, fontWeight: '600' },
 
-  // ── Search Results ──
+  hScroll: { paddingHorizontal: 12, gap: 10 },
+
+  listingCard: { borderRadius: 12, padding: 12, borderWidth: 1, position: 'relative', elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  discountBadge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#1D9E75', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  discountText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  lcProduct: { fontSize: 13, fontWeight: '700', marginBottom: 2, paddingRight: 36 },
+  lcBrand: { fontSize: 11, fontWeight: '500', marginBottom: 2 },
+  lcWholesaler: { fontSize: 10, marginBottom: 6 },
+  lcPriceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  lcOldPrice: { fontSize: 11, textDecorationLine: 'line-through' },
+  lcPrice: { fontSize: 16, fontWeight: '800' },
+  lcMoq: { fontSize: 9 },
+
+  topSellerCard: { width: SCREEN_W * 0.48, borderRadius: 12, padding: 12, borderWidth: 1, position: 'relative', elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  topSellerRank: { position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: '#185FA5', justifyContent: 'center', alignItems: 'center' },
+  topSellerRankText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  topSellerStats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  topSellerStat: { fontSize: 10, fontWeight: '600' },
+
+  spotlightCard: { marginHorizontal: 12, borderRadius: 14, padding: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 12, elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  spotlightLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  spotlightAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  spotlightAvatarText: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  spotlightName: { fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  spotlightMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  verifiedBadge: { fontSize: 10, color: '#1D9E75', fontWeight: '600' },
+  spotlightRating: { fontSize: 10 },
+  spotlightListings: { fontSize: 10 },
+  spotlightCats: { fontSize: 10 },
+  browseBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, flexShrink: 0 },
+  browseBtnText: { fontSize: 12, fontWeight: '700' },
+
+  categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 8 },
+  categoryCard: { width: '30%', margin: '1.5%', borderRadius: 12, padding: 10, alignItems: 'center', elevation: 1, borderWidth: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+  categoryCardActive: { backgroundColor: '#185FA5', borderColor: '#185FA5', elevation: 4, shadowColor: '#185FA5', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 },
+  emojiBox: { width: 44, height: 44, borderRadius: 11, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+  categoryEmoji: { fontSize: 22 },
+  categoryName: { fontSize: 10, textAlign: 'center', fontWeight: '600', lineHeight: 13 },
+  activeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#F2C94C', marginTop: 3 },
+
   resultsList: { paddingTop: 8, paddingBottom: 20 },
-  resultsHeader: { fontSize: 13, paddingHorizontal: 16, paddingVertical: 10 },
-  productCard: {
-    marginHorizontal: 16, marginBottom: 10,
-    borderRadius: 14, padding: 16,
-    flexDirection: 'row', elevation: 1,
-    overflow: 'hidden',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3,
-  },
-  accentBar: { width: 3, borderRadius: 3, marginRight: 14, alignSelf: 'stretch' },
-  productInfo: { flex: 1, marginRight: 12 },
-  productName: { fontSize: 15, fontWeight: '600', lineHeight: 21 },
-  productBrand: { fontSize: 13, marginTop: 3, fontWeight: '500' },
-  wholesalerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  wholesalerIcon: { fontSize: 11 },
-  wholesalerName: { fontSize: 11, flex: 1 },
-  categoryPill: {
-    alignSelf: 'flex-start', borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 3, marginTop: 6,
-  },
-  categoryPillText: { fontSize: 11, fontWeight: '600' },
+  resultsHeader: { fontSize: 13, paddingHorizontal: 14, paddingVertical: 8 },
+  productCard: { marginHorizontal: 14, marginBottom: 10, borderRadius: 12, padding: 14, flexDirection: 'row', elevation: 1, overflow: 'hidden', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
+  accentBar: { width: 3, borderRadius: 3, marginRight: 12, alignSelf: 'stretch' },
+  productInfo: { flex: 1, marginRight: 10 },
+  productName: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  productBrand: { fontSize: 12, marginTop: 2, fontWeight: '500' },
+  wholesalerRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  wholesalerIcon: { fontSize: 10 },
+  wholesalerName: { fontSize: 10, flex: 1 },
+  categoryPill: { alignSelf: 'flex-start', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2, marginTop: 5 },
+  categoryPillText: { fontSize: 10, fontWeight: '600' },
   priceBox: { alignItems: 'flex-end', justifyContent: 'center' },
-  oldPrice: { fontSize: 12, textDecorationLine: 'line-through' },
-  price: { fontSize: 18, fontWeight: '800' },
-  moq: { fontSize: 11, marginTop: 3 },
-  stockBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
-  stockText: { fontSize: 10, fontWeight: '600' },
-
-  // ── Empty state ──
+  oldPrice: { fontSize: 11, textDecorationLine: 'line-through' },
+  price: { fontSize: 17, fontWeight: '800' },
+  moq: { fontSize: 10, marginTop: 2 },
+  stockBadge: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2, marginTop: 3 },
+  stockText: { fontSize: 9, fontWeight: '600' },
   emptySearch: { alignItems: 'center', marginTop: 60 },
   emptyIcon: { fontSize: 48, marginBottom: 12 },
-  noResults: { fontSize: 17, fontWeight: '600', marginBottom: 6 },
-  noResultsSub: { fontSize: 14 },
+  noResults: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
+  noResultsSub: { fontSize: 13 },
 });
+
+
+

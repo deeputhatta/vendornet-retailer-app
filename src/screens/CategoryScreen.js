@@ -14,7 +14,7 @@ const SORT_OPTIONS = [
 ];
 
 export default function CategoryScreen({ route, navigation }) {
-  const { category } = route.params;
+  const { category, wholesaler_id } = route.params || {};
   const [listings, setListings] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,7 +30,10 @@ export default function CategoryScreen({ route, navigation }) {
 
   const loadListings = async () => {
     try {
-      const res = await listingsAPI.getListings({ category_id: category.category_id });
+      const params = {};
+      if (category?.category_id) params.category_id = category.category_id;
+      if (wholesaler_id) params.wholesaler_id = wholesaler_id;
+      const res = await listingsAPI.getListings(params);
       setListings(res.data.listings || []);
     } catch (err) {
       console.error(err);
@@ -181,7 +184,7 @@ export default function CategoryScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backBtn}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{category.name}</Text>
+        <Text style={styles.headerTitle}>{category?.name || 'All Products'}</Text>
         <Text style={styles.headerSub}>{filtered.length} products</Text>
       </View>
 

@@ -22,6 +22,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import InvoiceScreen from '../screens/InvoiceScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import StaffManagementScreen from '../screens/StaffManagementScreen';
+import CategoryPickerScreen from '../screens/CategoryPickerScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -37,6 +38,7 @@ function MoreScreen({ navigation }) {
     { icon: '🔔', label: 'Notifications',   screen: 'Notifications' },
     ...(isAdmin ? [{ icon: '👥', label: 'Staff Management', screen: 'StaffManagement' }] : []),
     { icon: '👤', label: 'Profile',         screen: 'Profile' },
+    { icon: '🏷', label: 'My Categories',   screen: 'CategoryPicker' },
   ];
 
   return (
@@ -203,11 +205,16 @@ function MainStack() {
         component={ProfileScreen}
         options={{ headerShown: false }}
       />
-      <Stack.Screen
-        name="StaffManagement"
-        component={StaffManagementScreen}
-        options={{ headerShown: false }}
-      />
+        <Stack.Screen
+          name="StaffManagement"
+          component={StaffManagementScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="CategoryPicker"
+          component={CategoryPickerScreen}
+          options={{ headerShown: false }}
+        />
     </Stack.Navigator>
   );
 }
@@ -267,3 +274,5 @@ const styles = StyleSheet.create({
   moreLabel: { flex: 1, fontSize: 16, fontWeight: '600' },
   moreArrow: { fontSize: 16 },
 });
+
+
