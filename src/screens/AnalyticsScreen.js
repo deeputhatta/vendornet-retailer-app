@@ -5,6 +5,8 @@ import {
   Animated
 } from 'react-native';
 import api from '../services/api';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../context/ThemeContext';
 
 const FINANCIAL_YEARS = ['2023-24', '2024-25', '2025-26', '2026-27'];
@@ -59,7 +61,7 @@ function AnimatedProgress({ pct, color, delay = 0 }) {
   );
 }
 
-export default function AnalyticsScreen() {
+export default function AnalyticsScreen({ navigation }) {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -68,6 +70,7 @@ export default function AnalyticsScreen() {
     const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
     return `${startYear}-${String(startYear + 1).slice(2)}`;
   });
+  const [sharing, setSharing] = useState(false);
   const { theme } = useTheme();
   const c = theme.colors;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -96,6 +99,84 @@ export default function AnalyticsScreen() {
       const found = analytics.monthly_spend.find(r => parseInt(r.month) === m);
       return found ? parseFloat(found.spend) : 0;
     });
+  };
+
+  const shareReport = async () => {
+    if (!analytics) return;
+    setSharing(true);
+    try {
+      const summary = analytics.summary || {};
+      const topItems = analytics.top_items || [];
+      const topWholesalers = analytics.top_wholesalers || [];
+      const statusBreakdown = analytics.status_breakdown || [];
+      const monthlyData = getMonthlyData();
+      const avgOrderValue = summary.total_orders > 0 ? summary.total_spend / summary.total_orders : 0;
+
+      let csv = '';
+
+      // Summary
+      csv += 'VENDORNET — PURCHASE ANALYTICS REPORT\n';
+      csv += `Financial Year: FY ${selectedFY}\n`;
+      csv += `Generated: ${new Date().toLocaleString('en-IN')}\n\n`;
+
+      csv += '== SUMMARY ==\n';
+      csv += `Total Spent,₹${summary.total_spend?.toFixed(2) || 0}\n`;
+      csv += `Total Orders,${summary.total_orders || 0}\n`;
+      csv += `Average Order Value,₹${avgOrderValue.toFixed(2)}\n`;
+      csv += `Total Suppliers,${topWholesalers.length}\n\n`;
+
+      // Monthly spend
+      csv += '== MONTHLY SPEND ==\n';
+      csv += 'Month,Spend (₹),Orders\n';
+      const MONTHS_LIST = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+      const MONTH_NUMS_LIST = [4,5,6,7,8,9,10,11,12,1,2,3];
+      MONTHS_LIST.forEach((month, i) => {
+        const found = analytics.monthly_spend?.find(r => parseInt(r.month) === MONTH_NUMS_LIST[i]);
+        csv += `${month},${found ? parseFloat(found.spend).toFixed(2) : 0},${found ? found.orders : 0}\n`;
+      });
+      csv += '\n';
+
+      // Top items
+      csv += '== TOP PURCHASED ITEMS ==\n';
+      csv += 'Product,Brand,Qty Ordered,Total Spent (₹)\n';
+      topItems.forEach(item => {
+        csv += `${item.generic_name},${item.brand_name},${item.total_qty},${parseFloat(item.total_spend || 0).toFixed(2)}\n`;
+      });
+      csv += '\n';
+
+      // Top wholesalers
+      csv += '== TOP SUPPLIERS ==\n';
+      csv += 'Supplier,Orders,Total Spent (₹)\n';
+      topWholesalers.forEach(w => {
+        csv += `${w.wholesaler_name},${w.order_count},${parseFloat(w.total_spent || 0).toFixed(2)}\n`;
+      });
+      csv += '\n';
+
+      // Status breakdown
+      csv += '== ORDER STATUS BREAKDOWN ==\n';
+      csv += 'Status,Count\n';
+      statusBreakdown.forEach(s => {
+        csv += `${s.status},${s.count}\n`;
+      });
+
+      // Write file
+      const fileName = `VendorNet_Analytics_FY${selectedFY.replace('-','_')}.csv`;
+      const filePath = FileSystem.documentDirectory + fileName;
+      await FileSystem.writeAsStringAsync(filePath, csv, { encoding: 'utf8' });
+
+      // Share
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(filePath, {
+          mimeType: 'text/csv',
+          dialogTitle: `Analytics Report FY ${selectedFY}`,
+        });
+      }
+    } catch (err) {
+      console.error('Share error:', err);
+    } finally {
+      setSharing(false);
+    }
   };
 
   if (loading) return (
@@ -134,8 +215,13 @@ export default function AnalyticsScreen() {
             <Text style={styles.heroTitle}>My Analytics</Text>
             <Text style={styles.heroSub}>Purchase performance</Text>
           </View>
-          <View style={[styles.heroBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-            <Text style={styles.heroBadgeText}>FY {selectedFY}</Text>
+          <View style={{flexDirection:'row',gap:8,alignItems:'center'}}>
+            <View style={[styles.heroBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+              <Text style={styles.heroBadgeText}>FY {selectedFY}</Text>
+            </View>
+            <TouchableOpacity style={{backgroundColor:'rgba(255,255,255,0.2)',borderRadius:10,paddingHorizontal:10,paddingVertical:7,flexDirection:'row',alignItems:'center',gap:4,borderWidth:1,borderColor:'rgba(255,255,255,0.3)'}} onPress={() => navigation.getParent()?.navigate('ReportDownload', { reportType: 'full' })}>
+              <Text style={{fontSize:14}}>📥</Text><Text style={{color:'#fff',fontWeight:'700',fontSize:12}}> Export</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -530,3 +616,11 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 36 },
   emptyText: { fontSize: 13 },
 });
+
+
+
+
+
+
+
+

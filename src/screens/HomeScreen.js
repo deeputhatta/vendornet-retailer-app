@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import AsyncStorageLib from '@react-native-async-storage/async-storage';
 import { searchAPI, catalogueAPI } from '../services/api';
+import { useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -41,6 +42,10 @@ export default function HomeScreen({ navigation }) {
   const [topSellers, setTopSellers] = useState([]);
   const [spotlight, setSpotlight] = useState(null);
   const [recentlyViewed, setRecentlyViewed] = useState([]);
+  const [pendingOrders, setPendingOrders] = useState([]);
+  const [dispatchedOrders, setDispatchedOrders] = useState([]);
+  const [bestDeal, setBestDeal] = useState(null);
+  const [lowStockItems, setLowStockItems] = useState([]);
   const { user } = useAuth();
   const { theme } = useTheme();
   const c = theme.colors;
@@ -49,6 +54,16 @@ export default function HomeScreen({ navigation }) {
     loadAll();
     loadRecentlyViewed();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      setQuery('');
+      setResults([]);
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+
 
   const loadRecentlyViewed = async () => {
     try {
@@ -102,6 +117,8 @@ export default function HomeScreen({ navigation }) {
         api.get('/listings/?new_arrivals=true&days=7&limit=8'),
         api.get('/orders/top-products?limit=5'),
         api.get('/orders/wholesaler-spotlight'),
+        api.get('/orders/my'),
+        api.get('/orders/top-products?limit=20'),
       ]);
       if (catRes.status === 'fulfilled') setCategories(catRes.value.data.categories || []);
       if (myRes.status === 'fulfilled') setMyCategories(myRes.value.data.categories?.map(cat => cat.category_id) || []);
@@ -109,10 +126,35 @@ export default function HomeScreen({ navigation }) {
         const d = statsRes.value.data;
         setStats({ totalSpent: d.summary?.total_spend || 0, totalOrders: d.summary?.total_orders || 0, topItem: d.top_items?.[0]?.generic_name || '—' });
       }
-      if (offersRes.status === 'fulfilled') setOffers((offersRes.value.data.listings || []).filter(l => l.offer_price));
+      if (offersRes.status === 'fulfilled') {
+        const offerList = (offersRes.value.data.listings || []).filter(l => l.offer_price);
+        setOffers(offerList);
+        if (offerList.length > 0) {
+          const best = offerList.reduce((a, b) => {
+            const discA = (a.price - a.offer_price) / a.price;
+            const discB = (b.price - b.offer_price) / b.price;
+            return discA > discB ? a : b;
+          });
+          setBestDeal(best);
+        }
+      }
       if (newRes.status === 'fulfilled') setNewArrivals(newRes.value.data.listings || []);
       if (topRes.status === 'fulfilled') setTopSellers(topRes.value.data.products || []);
       if (spotRes.status === 'fulfilled') setSpotlight(spotRes.value.data.wholesaler);
+      const ordersRes = results[7];
+      const topProductsRes = results[8];
+      if (topProductsRes?.status === 'fulfilled') {
+        const lowStock = (topProductsRes.value.data.products || [])
+          .filter(p => p.stock_qty !== undefined && parseInt(p.stock_qty) < 20 && parseInt(p.stock_qty) > 0);
+        setLowStockItems(lowStock.slice(0, 3));
+      }
+      if (ordersRes?.status === 'fulfilled') {
+        const allOrders = ordersRes.value.data.orders || [];
+        const pending = allOrders.filter(o => o.sub_orders?.some(s => ['pending','accepted'].includes(s.status)));
+        const dispatched = allOrders.filter(o => o.sub_orders?.some(s => s.status === 'dispatched'));
+        setPendingOrders(pending.slice(0, 3));
+        setDispatchedOrders(dispatched.slice(0, 3));
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -261,22 +303,74 @@ export default function HomeScreen({ navigation }) {
             ))}
           </View>
 
-          {/* QUICK ACTIONS */}
-          <View style={[styles.quickActions, { backgroundColor: c.surface, borderColor: c.border }]}>
-            {[
-              { icon: '🛒', label: 'Cart', screen: 'Cart' },
-              { icon: '📋', label: 'Orders', screen: 'Orders' },
-              { icon: '❤️', label: 'Wishlist', screen: 'Wishlist' },
-              { icon: '👤', label: 'Profile', screen: 'Profile' },
-            ].map((a, i) => (
-              <TouchableOpacity key={i} style={styles.quickAction} onPress={() => navigation.navigate(a.screen)}>
-                <View style={[styles.quickActionIcon, { backgroundColor: c.primaryLight }]}>
-                  <Text style={{ fontSize: 20 }}>{a.icon}</Text>
-                </View>
-                <Text style={[styles.quickActionLabel, { color: c.textMuted }]}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* SMART INFO CARDS */}
+          {(pendingOrders.length > 0 || dispatchedOrders.length > 0 || bestDeal || lowStockItems.length > 0) && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartCardsScroll}>
+
+              {/* Pending orders */}
+              {pendingOrders.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.smartCard, { backgroundColor: '#2A1F00', borderColor: '#F2C94C' }]}
+                  onPress={() => navigation.navigate('Orders')}>
+                  <Text style={styles.smartCardIcon}>⏳</Text>
+                  <Text style={[styles.smartCardTitle, { color: '#F2C94C' }]}>
+                    {pendingOrders.length} Pending Order{pendingOrders.length > 1 ? 's' : ''}
+                  </Text>
+                  <Text style={[styles.smartCardSub, { color: '#F2C94C', opacity: 0.75 }]}>
+                    Awaiting wholesaler confirmation
+                  </Text>
+                  <Text style={[styles.smartCardAction, { color: '#F2C94C' }]}>View Orders →</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Dispatched orders */}
+              {dispatchedOrders.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.smartCard, { backgroundColor: '#001830', borderColor: '#0A84FF' }]}
+                  onPress={() => navigation.navigate('Orders')}>
+                  <Text style={styles.smartCardIcon}>🚚</Text>
+                  <Text style={[styles.smartCardTitle, { color: '#0A84FF' }]}>
+                    {dispatchedOrders.length} Order{dispatchedOrders.length > 1 ? 's' : ''} On the Way
+                  </Text>
+                  <Text style={[styles.smartCardSub, { color: '#0A84FF', opacity: 0.75 }]}>
+                    {dispatchedOrders[0]?.sub_orders?.find(s => s.status === 'dispatched')?.wholesaler_name}
+                  </Text>
+                  <Text style={[styles.smartCardAction, { color: '#0A84FF' }]}>Track Delivery →</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Low stock alert */}
+              {lowStockItems.length > 0 && (
+                <TouchableOpacity
+                  style={[styles.smartCard, { backgroundColor: '#2A1500', borderColor: '#FF9500' }]}
+                  onPress={() => navigateToProduct({ ...lowStockItems[0], effective_price: lowStockItems[0].offer_price || lowStockItems[0].price, has_offer: !!lowStockItems[0].offer_price })}>
+                  <Text style={styles.smartCardIcon}>⚠️</Text>
+                  <Text style={[styles.smartCardTitle, { color: '#FF9500' }]}>Low Stock Alert</Text>
+                  <Text style={[styles.smartCardSub, { color: '#FF9500', opacity: 0.75 }]} numberOfLines={2}>
+                    {lowStockItems[0].generic_name} — only {lowStockItems[0].stock_qty} units left
+                  </Text>
+                  <Text style={[styles.smartCardAction, { color: '#FF9500' }]}>Order Now →</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Best deal */}
+              {bestDeal && (
+                <TouchableOpacity
+                  style={[styles.smartCard, { backgroundColor: '#003A10', borderColor: '#30D158' }]}
+                  onPress={() => navigateToProduct({ ...bestDeal, effective_price: bestDeal.offer_price, has_offer: true })}>
+                  <Text style={styles.smartCardIcon}>🔥</Text>
+                  <Text style={[styles.smartCardTitle, { color: '#30D158' }]}>
+                    {Math.round(((bestDeal.price - bestDeal.offer_price) / bestDeal.price) * 100)}% OFF Today
+                  </Text>
+                  <Text style={[styles.smartCardSub, { color: '#30D158', opacity: 0.75 }]} numberOfLines={1}>
+                    {bestDeal.generic_name} — {bestDeal.brand_name}
+                  </Text>
+                  <Text style={[styles.smartCardAction, { color: '#30D158' }]}>Grab Deal →</Text>
+                </TouchableOpacity>
+              )}
+
+            </ScrollView>
+          )}
 
           {/* OFFERS */}
           {offers.length > 0 && (
@@ -454,10 +548,12 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 13, fontWeight: '800' },
   statLabel: { fontSize: 9, marginTop: 1, fontWeight: '600', opacity: 0.8 },
 
-  quickActions: { flexDirection: 'row', marginHorizontal: 12, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 10 },
-  quickAction: { flex: 1, alignItems: 'center', gap: 5 },
-  quickActionIcon: { width: 42, height: 42, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
-  quickActionLabel: { fontSize: 10, fontWeight: '600' },
+  smartCardsScroll: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
+  smartCard: { width: 145, borderRadius: 12, padding: 10, borderWidth: 1.5, gap: 4 },
+  smartCardIcon: { fontSize: 18, marginBottom: 1 },
+  smartCardTitle: { fontSize: 12, fontWeight: '800' },
+  smartCardSub: { fontSize: 10, lineHeight: 14 },
+  smartCardAction: { fontSize: 10, fontWeight: '700', marginTop: 4 },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, marginTop: 18, marginBottom: 10 },
   sectionTitle: { fontSize: 15, fontWeight: '700' },
@@ -528,6 +624,11 @@ const styles = StyleSheet.create({
   noResults: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   noResultsSub: { fontSize: 13 },
 });
+
+
+
+
+
 
 
 

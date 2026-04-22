@@ -23,6 +23,7 @@ import InvoiceScreen from '../screens/InvoiceScreen';
 import CategoryScreen from '../screens/CategoryScreen';
 import StaffManagementScreen from '../screens/StaffManagementScreen';
 import CategoryPickerScreen from '../screens/CategoryPickerScreen';
+import ReportDownloadScreen from '../screens/ReportDownloadScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -213,6 +214,11 @@ function MainStack() {
         <Stack.Screen
           name="CategoryPicker"
           component={CategoryPickerScreen}
+        />
+        <Stack.Screen
+          name="ReportDownload"
+          component={ReportDownloadScreen}
+          options={{ headerShown: false }}
           options={{ headerShown: false }}
         />
     </Stack.Navigator>
@@ -274,5 +280,6 @@ const styles = StyleSheet.create({
   moreLabel: { flex: 1, fontSize: 16, fontWeight: '600' },
   moreArrow: { fontSize: 16 },
 });
+
 
 

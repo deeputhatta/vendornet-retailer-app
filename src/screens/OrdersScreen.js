@@ -217,9 +217,16 @@ export default function OrdersScreen({ navigation }) {
       <View style={[styles.header, { backgroundColor: c.primary }]}>
         <View style={styles.headerTop}>
           <Text style={styles.title}>My Orders</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => navigation.getParent()?.navigate('ReportDownload', { reportType: 'orders' })}
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }}>
+              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '800' }}>📥  Report</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
             <Text style={styles.notifBtn}>🔔</Text>
           </TouchableOpacity>
+          </View>
         </View>
         <Text style={styles.headerSub}>{orders.length} total orders</Text>
       </View>
@@ -353,4 +360,6 @@ const styles = StyleSheet.create({
   shopBtn: { borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
   shopBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
 });
+
+
 
