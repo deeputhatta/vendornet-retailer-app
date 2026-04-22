@@ -7,8 +7,15 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+
+const formatDisplayDate = (iso) => {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return d + '/' + m + '/' + y;
+};
 
 const CURRENT_YEAR = new Date().getFullYear();
 const CURRENT_MONTH = new Date().getMonth();
@@ -49,6 +56,8 @@ export default function ReportDownloadScreen({ navigation, route }) {
   const [customTo, setCustomTo] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [downloading, setDownloading] = useState(false);
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
 
   const getDateParams = () => {
     if (dateMode === 'fy') return { fy: selectedFY };
@@ -60,7 +69,7 @@ export default function ReportDownloadScreen({ navigation, route }) {
 
   const getDateSummary = () => {
     if (dateMode === 'fy') return `Financial Year ${selectedFY}-${(selectedFY+1).toString().slice(2)}`;
-    if (dateMode === 'custom') return customFrom ? `${customFrom} to ${customTo||'today'}` : 'Select dates';
+    if (dateMode === 'custom') return customFrom ? `${formatDisplayDate(customFrom)} to ${customTo ? formatDisplayDate(customTo) : 'today'}` : 'Select dates';
     return DATE_PRESETS.find(d => d.key === selectedPreset)?.label || 'All time';
   };
 
@@ -190,17 +199,43 @@ export default function ReportDownloadScreen({ navigation, route }) {
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.dateLabel, { color: c.textMuted }]}>FROM</Text>
-                <TouchableOpacity style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customFrom ? c.primary : c.border }]}
-                  onPress={() => Alert.prompt('From Date', 'YYYY-MM-DD', setCustomFrom, 'plain-text', customFrom)}>
-                  <Text style={{ color: customFrom ? c.text : c.textMuted }}>{customFrom || 'YYYY-MM-DD'}</Text>
+                <TouchableOpacity
+                  style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customFrom ? c.primary : c.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                  onPress={() => setShowFromPicker(true)}>
+                  <Text style={{ color: customFrom ? c.text : c.textMuted, fontSize: 14 }}>{customFrom || 'Select date'}</Text>
+                  <Text style={{ fontSize: 16 }}>📅</Text>
                 </TouchableOpacity>
+                {showFromPicker && (
+                  <DateTimePicker
+                    value={customFrom ? new Date(customFrom) : new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(event, date) => {
+                      setShowFromPicker(false);
+                      if (date) setCustomFrom(date.toISOString().slice(0,10));
+                    }}
+                  />
+                )}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.dateLabel, { color: c.textMuted }]}>TO</Text>
-                <TouchableOpacity style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customTo ? c.primary : c.border }]}
-                  onPress={() => Alert.prompt('To Date', 'YYYY-MM-DD', setCustomTo, 'plain-text', customTo)}>
-                  <Text style={{ color: customTo ? c.text : c.textMuted }}>{customTo || 'YYYY-MM-DD'}</Text>
+                <TouchableOpacity
+                  style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customTo ? c.primary : c.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                  onPress={() => setShowToPicker(true)}>
+                  <Text style={{ color: customTo ? c.text : c.textMuted, fontSize: 14 }}>{customTo || 'Select date'}</Text>
+                  <Text style={{ fontSize: 16 }}>📅</Text>
                 </TouchableOpacity>
+                {showToPicker && (
+                  <DateTimePicker
+                    value={customTo ? new Date(customTo) : new Date()}
+                    mode="date"
+                    display="default"
+                    onChange={(event, date) => {
+                      setShowToPicker(false);
+                      if (date) setCustomTo(date.toISOString().slice(0,10));
+                    }}
+                  />
+                )}
               </View>
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -322,6 +357,7 @@ const styles = StyleSheet.create({
   downloadBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
   downloadBtnText: { fontSize: 16, fontWeight: '800', color: '#000' },
 });
+
 
 
 

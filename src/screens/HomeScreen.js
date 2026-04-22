@@ -343,7 +343,7 @@ export default function HomeScreen({ navigation }) {
               {lowStockItems.length > 0 && (
                 <TouchableOpacity
                   style={[styles.smartCard, { backgroundColor: '#2A1500', borderColor: '#FF9500' }]}
-                  onPress={() => navigateToProduct({ ...lowStockItems[0], effective_price: lowStockItems[0].offer_price || lowStockItems[0].price, has_offer: !!lowStockItems[0].offer_price })}>
+                  onPress={() => navigation.navigate('Category', { category: { category_id: lowStockItems[0].category_id || null, name: lowStockItems[0].category_name || 'Products', slug: '' } })}>
                   <Text style={styles.smartCardIcon}>⚠️</Text>
                   <Text style={[styles.smartCardTitle, { color: '#FF9500' }]}>Low Stock Alert</Text>
                   <Text style={[styles.smartCardSub, { color: '#FF9500', opacity: 0.75 }]} numberOfLines={2}>
@@ -624,6 +624,10 @@ const styles = StyleSheet.create({
   noResults: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   noResultsSub: { fontSize: 13 },
 });
+
+
+
+
 
 
 

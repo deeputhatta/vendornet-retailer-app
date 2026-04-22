@@ -34,12 +34,12 @@ function MoreScreen({ navigation }) {
   const c = theme.colors;
 
   const moreItems = [
-    { icon: '❤️', label: 'Wishlist',       screen: 'Wishlist' },
-    { icon: '🧾', label: 'Invoices',        screen: 'Invoices' },
-    { icon: '🔔', label: 'Notifications',   screen: 'Notifications' },
-    ...(isAdmin ? [{ icon: '👥', label: 'Staff Management', screen: 'StaffManagement' }] : []),
-    { icon: '👤', label: 'Profile',         screen: 'Profile' },
     { icon: '🏷', label: 'My Categories',   screen: 'CategoryPicker' },
+    { icon: '❤️', label: 'Wishlist',         screen: 'Wishlist' },
+    { icon: '🧾', label: 'Invoices',         screen: 'Invoices' },
+    { icon: '🔔', label: 'Notifications',    screen: 'Notifications' },
+    ...(isAdmin ? [{ icon: '👥', label: 'Staff Management', screen: 'StaffManagement' }] : []),
+    { icon: '👤', label: 'Profile',          screen: 'Profile' },
   ];
 
   return (
@@ -280,6 +280,7 @@ const styles = StyleSheet.create({
   moreLabel: { flex: 1, fontSize: 16, fontWeight: '600' },
   moreArrow: { fontSize: 16 },
 });
+
 
 
 
