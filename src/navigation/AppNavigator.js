@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,6 +7,10 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { usePermissions } from '../context/PermissionContext';
 import { CartProvider } from '../context/CartContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
+import { callbacks } from '../utils/callbacks';
+import { appEvents } from '../utils/appEvents';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -227,6 +231,24 @@ function MainStack() {
 
 export default function AppNavigator() {
   const { user, loading } = useAuth();
+  const [categoryChecked, setCategoryChecked] = useState(false);
+  const [hasCategories, setHasCategories] = useState(true);
+  useEffect(() => {
+    if (user) {
+      api.get('/categories/my')
+        .then(res => { setHasCategories((res.data.categories||[]).length > 0); })
+        .catch(() => setHasCategories(true))
+        .finally(() => setCategoryChecked(true));
+    } else {
+      setCategoryChecked(false);
+      setHasCategories(true);
+    }
+  }, [user]);
+
+  // Register global callback for category completion
+  callbacks.onCategoryDone = () => { setHasCategories(true); setCategoryChecked(true); };
+  
+  
   const { theme } = useTheme();
   const c = theme.colors;
 
@@ -250,7 +272,10 @@ export default function AppNavigator() {
       <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="MainStack" component={MainStack} />
+          !categoryChecked ? <Stack.Screen name="Loading">{() => null}</Stack.Screen> :
+          !hasCategories
+            ? <Stack.Screen name="CategorySetup" component={CategoryPickerScreen} initialParams={{ isOnboarding: true }} />
+            : <Stack.Screen name="MainStack" component={MainStack} />
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
@@ -280,6 +305,11 @@ const styles = StyleSheet.create({
   moreLabel: { flex: 1, fontSize: 16, fontWeight: '600' },
   moreArrow: { fontSize: 16 },
 });
+
+
+
+
+
 
 
 

@@ -50,10 +50,12 @@ export default function HomeScreen({ navigation }) {
   const { theme } = useTheme();
   const c = theme.colors;
 
-  useEffect(() => {
-    loadAll();
-    loadRecentlyViewed();
-  }, []);
+  useFocusEffect(
+    React.useCallback(() => {
+      loadAll();
+      loadRecentlyViewed();
+    }, [])
+  );
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('tabPress', () => {
