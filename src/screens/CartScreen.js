@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, ActivityIndicator
+  StyleSheet, Alert, ActivityIndicator, TextInput
 } from 'react-native';
 import { ordersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -39,10 +39,7 @@ export default function CartScreen({ navigation }) {
       Alert.alert(
         '✓ Order Placed!',
         `Order placed successfully with ${subOrderCount} supplier${subOrderCount > 1 ? 's' : ''}.\n\nOrder ID: #${res.data.order.order_id.slice(0, 8).toUpperCase()}`,
-        [{ text: 'View Orders', onPress: () => {
-          clearCart();
-          navigation.navigate('Orders');
-        }}]
+        [{ text: 'View Orders', onPress: () => { clearCart(); navigation.navigate('Orders'); } }]
       );
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to place order');
@@ -63,12 +60,19 @@ export default function CartScreen({ navigation }) {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: c.primary }]}>
-        <Text style={styles.title}>My Cart</Text>
-        {cartItems.length > 0 && (
-          <Text style={styles.subtitle}>
-            {cartItems.length} item{cartItems.length > 1 ? 's' : ''} · {wholesalerCount} supplier{wholesalerCount > 1 ? 's' : ''}
-          </Text>
-        )}
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backText}>←</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>My Cart</Text>
+            {cartItems.length > 0 && (
+              <Text style={styles.subtitle}>
+                {cartItems.length} item{cartItems.length > 1 ? 's' : ''} · {wholesalerCount} supplier{wholesalerCount > 1 ? 's' : ''}
+              </Text>
+            )}
+          </View>
+        </View>
       </View>
 
       {cartItems.length === 0 ? (
@@ -88,7 +92,6 @@ export default function CartScreen({ navigation }) {
             {/* Group by wholesaler */}
             {Object.values(cartByWholesaler).map(group => (
               <View key={group.wholesaler_id} style={styles.wholesalerGroup}>
-                {/* Wholesaler header */}
                 <View style={[styles.wholesalerHeader, { backgroundColor: c.primaryLight }]}>
                   <Text style={[styles.wholesalerName, { color: c.primary }]}>
                     🏪 {group.wholesaler_name}
@@ -98,34 +101,42 @@ export default function CartScreen({ navigation }) {
                   </Text>
                 </View>
 
-                {/* Items */}
                 {group.items.map(item => (
                   <View key={item.listing_id} style={[styles.itemCard, { backgroundColor: c.surface, shadowColor: c.text }]}>
                     <View style={styles.itemInfo}>
                       <Text style={[styles.itemName, { color: c.text }]}>{item.product_name}</Text>
                       <Text style={[styles.itemBrand, { color: c.primary }]}>{item.brand_name}</Text>
                       {item.pack_size && (
-                        <Text style={[styles.itemPack, { color: c.textMuted }]}>
-                          {item.pack_size} {item.unit}
-                        </Text>
+                        <Text style={[styles.itemPack, { color: c.textMuted }]}>{item.pack_size} {item.unit}</Text>
                       )}
-                      <Text style={[styles.itemUnitPrice, { color: c.textMuted }]}>
-                        ₹{item.unit_price}/unit
-                      </Text>
+                      <Text style={[styles.itemUnitPrice, { color: c.textMuted }]}>₹{item.unit_price}/unit</Text>
                     </View>
                     <View style={styles.itemRight}>
                       <Text style={[styles.itemTotal, { color: c.text }]}>
                         ₹{(item.unit_price * item.quantity).toLocaleString('en-IN')}
                       </Text>
 
-                      {/* Qty control */}
+                      {/* Qty control with TextInput */}
                       <View style={styles.qtyRow}>
                         <TouchableOpacity
                           style={[styles.qtyBtn, { backgroundColor: c.primaryLight }]}
                           onPress={() => updateQuantity(item.listing_id, Math.max(item.min_order_qty, item.quantity - 1))}>
                           <Text style={[styles.qtyBtnText, { color: c.primary }]}>−</Text>
                         </TouchableOpacity>
-                        <Text style={[styles.qtyValue, { color: c.text }]}>{item.quantity}</Text>
+                        <TextInput
+                          style={[styles.qtyValue, { color: c.text, borderBottomWidth: 1, borderBottomColor: c.border }]}
+                          value={String(item.quantity)}
+                          onChangeText={v => {
+                            const n = parseInt(v);
+                            if (!isNaN(n) && n > 0) updateQuantity(item.listing_id, n);
+                          }}
+                          onBlur={() => {
+                            const n = parseInt(item.quantity);
+                            if (isNaN(n) || n < item.min_order_qty) updateQuantity(item.listing_id, item.min_order_qty);
+                          }}
+                          keyboardType="numeric"
+                          selectTextOnFocus
+                        />
                         <TouchableOpacity
                           style={[styles.qtyBtn, { backgroundColor: c.primaryLight }]}
                           onPress={() => updateQuantity(item.listing_id, item.quantity + 1)}>
@@ -134,9 +145,7 @@ export default function CartScreen({ navigation }) {
                       </View>
 
                       {item.quantity < item.min_order_qty && (
-                        <Text style={[styles.moqWarn, { color: c.error }]}>
-                          Min: {item.min_order_qty}
-                        </Text>
+                        <Text style={[styles.moqWarn, { color: c.error }]}>Min: {item.min_order_qty}</Text>
                       )}
                       <TouchableOpacity onPress={() => confirmRemove(item.listing_id, item.product_name)}>
                         <Text style={[styles.removeBtn, { color: c.error }]}>Remove</Text>
@@ -145,7 +154,6 @@ export default function CartScreen({ navigation }) {
                   </View>
                 ))}
 
-                {/* Wholesaler subtotal */}
                 <View style={[styles.subtotalRow, { borderTopColor: c.border }]}>
                   <Text style={[styles.subtotalLabel, { color: c.textMuted }]}>Subtotal</Text>
                   <Text style={[styles.subtotalAmount, { color: c.primary }]}>
@@ -155,7 +163,6 @@ export default function CartScreen({ navigation }) {
               </View>
             ))}
 
-            {/* Multi-supplier note */}
             {wholesalerCount > 1 && (
               <View style={[styles.multiNote, { backgroundColor: c.primaryLight }]}>
                 <Text style={[styles.multiNoteText, { color: c.primary }]}>
@@ -163,6 +170,13 @@ export default function CartScreen({ navigation }) {
                 </Text>
               </View>
             )}
+
+            {/* Browse More button */}
+            <TouchableOpacity
+              style={[styles.browseMoreBtn, { borderColor: c.primary, backgroundColor: c.primaryLight }]}
+              onPress={() => navigation.navigate('Home')}>
+              <Text style={[styles.browseMoreText, { color: c.primary }]}>+ Browse More Products</Text>
+            </TouchableOpacity>
 
             <View style={{ height: 16 }} />
           </ScrollView>
@@ -173,19 +187,13 @@ export default function CartScreen({ navigation }) {
               <View>
                 <Text style={[styles.totalLabel, { color: c.textMuted }]}>Total Amount</Text>
                 {wholesalerCount > 1 && (
-                  <Text style={[styles.supplierNote, { color: c.textMuted }]}>
-                    {wholesalerCount} suppliers
-                  </Text>
+                  <Text style={[styles.supplierNote, { color: c.textMuted }]}>{wholesalerCount} suppliers</Text>
                 )}
               </View>
-              <Text style={[styles.totalAmount, { color: c.primary }]}>
-                ₹{cartTotal.toLocaleString('en-IN')}
-              </Text>
+              <Text style={[styles.totalAmount, { color: c.primary }]}>₹{cartTotal.toLocaleString('en-IN')}</Text>
             </View>
             {!allMOQMet && (
-              <Text style={[styles.moqError, { color: c.error }]}>
-                Some items are below minimum order quantity
-              </Text>
+              <Text style={[styles.moqError, { color: c.error }]}>Some items are below minimum order quantity</Text>
             )}
             <TouchableOpacity
               style={[styles.orderBtn, { backgroundColor: allMOQMet ? c.primary : c.primaryLight }]}
@@ -207,28 +215,22 @@ export default function CartScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { padding: 20, paddingTop: 48 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' },
-  subtitle: { fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 4 },
+  header: { padding: 16, paddingTop: 48 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  backBtn: { padding: 4 },
+  backText: { color: 'rgba(255,255,255,0.85)', fontSize: 22 },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
+  subtitle: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyText: { fontSize: 16, marginBottom: 24 },
   shopBtn: { borderRadius: 12, paddingHorizontal: 32, paddingVertical: 14 },
   shopBtnText: { fontSize: 15, fontWeight: '600' },
   list: { flex: 1 },
   wholesalerGroup: { marginBottom: 8 },
-  wholesalerHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10,
-  },
+  wholesalerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 },
   wholesalerName: { fontSize: 14, fontWeight: '700' },
   wholesalerItemCount: { fontSize: 12 },
-  itemCard: {
-    marginHorizontal: 12, marginBottom: 6,
-    borderRadius: 12, padding: 14,
-    flexDirection: 'row', justifyContent: 'space-between',
-    elevation: 1, shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3,
-  },
+  itemCard: { marginHorizontal: 12, marginBottom: 6, borderRadius: 12, padding: 14, flexDirection: 'row', justifyContent: 'space-between', elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
   itemInfo: { flex: 1, marginRight: 8 },
   itemName: { fontSize: 15, fontWeight: '600' },
   itemBrand: { fontSize: 13, marginTop: 2 },
@@ -236,24 +238,20 @@ const styles = StyleSheet.create({
   itemUnitPrice: { fontSize: 12, marginTop: 4 },
   itemRight: { alignItems: 'flex-end' },
   itemTotal: { fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   qtyBtn: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   qtyBtnText: { fontSize: 18, fontWeight: 'bold', lineHeight: 22 },
-  qtyValue: { fontSize: 16, fontWeight: 'bold', minWidth: 28, textAlign: 'center' },
+  qtyValue: { fontSize: 16, fontWeight: 'bold', minWidth: 36, textAlign: 'center' },
   moqWarn: { fontSize: 10, marginBottom: 2 },
   removeBtn: { fontSize: 12, marginTop: 4 },
-  subtotalRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5,
-  },
+  subtotalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, borderTopWidth: 0.5 },
   subtotalLabel: { fontSize: 13 },
   subtotalAmount: { fontSize: 14, fontWeight: '700' },
   multiNote: { margin: 12, borderRadius: 10, padding: 12 },
   multiNoteText: { fontSize: 12, lineHeight: 18 },
-  footer: {
-    padding: 16, elevation: 4, borderTopWidth: 1,
-    shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 4,
-  },
+  browseMoreBtn: { marginHorizontal: 12, marginTop: 4, borderRadius: 12, height: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5 },
+  browseMoreText: { fontSize: 14, fontWeight: '600' },
+  footer: { padding: 16, elevation: 4, borderTopWidth: 1, shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 4 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   totalLabel: { fontSize: 14, fontWeight: '500' },
   supplierNote: { fontSize: 11, marginTop: 2 },

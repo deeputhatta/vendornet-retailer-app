@@ -1,29 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Alert, Animated
+  StyleSheet, Alert, LayoutAnimation, UIManager, Platform, TextInput
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { addToWishlist, removeFromWishlist, isInWishlist } from './WishlistScreen';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const getAttributes = (attrs) => {
   try {
     if (!attrs) return [];
     const parsed = typeof attrs === 'string' ? JSON.parse(attrs) : attrs;
-    return Object.entries(parsed);
-  } catch {
-    return [];
-  }
+    return Object.entries(parsed).filter(([k, v]) => v !== null && v !== undefined && v !== '');
+  } catch { return []; }
 };
+
+function CollapsibleSection({ title, children, defaultOpen = false, colors: c }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setOpen(p => !p);
+  };
+  return (
+    <View style={[sStyles.card, { backgroundColor: c.surface }]}>
+      <TouchableOpacity onPress={toggle} style={sStyles.sectionHeader} activeOpacity={0.7}>
+        <Text style={[sStyles.sectionTitle, { color: c.text }]}>{title}</Text>
+        <Text style={{ fontSize: 16, color: c.textMuted }}>{open ? '▾' : '▸'}</Text>
+      </TouchableOpacity>
+      {open && <View style={sStyles.sectionBody}>{children}</View>}
+    </View>
+  );
+}
+
+function DetailRow({ label, value, colors: c }) {
+  return (
+    <View style={[sStyles.detailRow, { borderBottomColor: c.borderLight }]}>
+      <Text style={[sStyles.detailLabel, { color: c.textMuted }]}>{label}</Text>
+      <Text style={[sStyles.detailValue, { color: c.text }]}>{value}</Text>
+    </View>
+  );
+}
 
 export default function ProductDetailScreen({ route, navigation }) {
   const { listing } = route.params;
   const [quantity, setQuantity] = useState(listing.min_order_qty || 1);
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
-  const { user } = useAuth();
   const { theme } = useTheme();
   const c = theme.colors;
   const { addToCart, cartItems } = useCart();
@@ -32,7 +58,6 @@ export default function ProductDetailScreen({ route, navigation }) {
 
   useEffect(() => {
     isInWishlist(listing.listing_id).then(setWishlisted);
-    // Pre-fill quantity if already in cart
     if (alreadyInCart) setQuantity(alreadyInCart.quantity);
   }, []);
 
@@ -57,13 +82,14 @@ export default function ProductDetailScreen({ route, navigation }) {
   };
 
   const handleAddToCart = () => {
-    if (quantity < listing.min_order_qty) {
+    const qty = parseInt(quantity) || listing.min_order_qty;
+    if (qty < listing.min_order_qty) {
       Alert.alert('MOQ Error', `Minimum order is ${listing.min_order_qty} units`);
       return;
     }
     addToCart({
       listing_id: listing.listing_id,
-      quantity,
+      quantity: qty,
       unit_price: listing.effective_price,
       product_name: listing.generic_name,
       brand_name: listing.brand_name,
@@ -77,187 +103,226 @@ export default function ProductDetailScreen({ route, navigation }) {
     setTimeout(() => setAdded(false), 2000);
   };
 
-  const goToCart = () => {
-    navigation.navigate('Main', { screen: 'Cart' });
-  };
+  const goToCart = () => navigation.navigate('Main', { screen: 'Cart' });
+
+  const qty = parseInt(quantity) || 0;
+  const total = (listing.effective_price * qty).toLocaleString('en-IN');
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: c.background }]}>
+    <View style={{ flex: 1, backgroundColor: c.background }}>
 
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: c.primary }]}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
+      {/* ── Compact Header ── */}
+      <View style={[sStyles.header, { backgroundColor: c.primary }]}>
+        <View style={sStyles.headerTop}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={sStyles.iconBtn}>
+            <Text style={sStyles.iconBtnText}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleWishlist} style={styles.heartBtn}>
-            <Text style={styles.heartIcon}>{wishlisted ? '❤️' : '🤍'}</Text>
+          <TouchableOpacity onPress={toggleWishlist} style={sStyles.iconBtn}>
+            <Text style={sStyles.iconBtnText}>{wishlisted ? '❤️' : '🤍'}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.productName}>{listing.generic_name}</Text>
-        <Text style={styles.brand}>{listing.brand_name}</Text>
-        <Text style={styles.category}>{listing.category_name}</Text>
-        <View style={[styles.wholesalerBadge, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-          <Text style={styles.wholesalerBadgeText}>🏪 {listing.wholesaler_name}</Text>
+
+        <Text style={sStyles.productName} numberOfLines={1}>{listing.generic_name}</Text>
+        <Text style={sStyles.brand} numberOfLines={1}>{listing.brand_name} · {listing.category_name}</Text>
+
+        <View style={sStyles.priceRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            {listing.has_offer && (
+              <Text style={sStyles.oldPrice}>₹{listing.price}</Text>
+            )}
+            <Text style={sStyles.price}>₹{listing.effective_price}<Text style={sStyles.perUnit}>/unit</Text></Text>
+          </View>
+          {listing.has_offer && (
+            <View style={sStyles.offerBadge}>
+              <Text style={sStyles.offerText}>OFFER</Text>
+            </View>
+          )}
         </View>
+
+        {/* Qty + Add to Cart in header */}
+        <View style={sStyles.headerCartRow}>
+          <View style={sStyles.qtyRowInline}>
+            <TouchableOpacity
+              style={sStyles.qtyBtnSmall}
+              onPress={() => setQuantity(q => Math.max(listing.min_order_qty, (parseInt(q) || 1) - 1))}>
+              <Text style={sStyles.qtyBtnSmallText}>−</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={sStyles.qtyValueSmall}
+              value={String(quantity)}
+              onChangeText={v => {
+                const n = parseInt(v);
+                if (!isNaN(n) && n > 0) setQuantity(n);
+                else if (v === '') setQuantity('');
+              }}
+              onBlur={() => {
+                const n = parseInt(quantity);
+                setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty);
+              }}
+              keyboardType="numeric"
+              selectTextOnFocus
+            />
+            <TouchableOpacity
+              style={sStyles.qtyBtnSmall}
+              onPress={() => setQuantity(q => (parseInt(q) || 0) + 1)}>
+              <Text style={sStyles.qtyBtnSmallText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[sStyles.headerCartBtn, { backgroundColor: added ? '#1D9E75' : 'rgba(255,255,255,0.2)' }]}
+            onPress={handleAddToCart}>
+            <Text style={sStyles.headerCartBtnText}>
+              {added ? '✓ Added!' : alreadyInCart ? 'Update Cart' : '🛒 Add to Cart'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={sStyles.totalInHeader}>Total: ₹{total}</Text>
       </View>
 
       {/* Already in cart banner */}
       {alreadyInCart && (
-        <TouchableOpacity
-          onPress={goToCart}
-          style={[styles.inCartBanner, { backgroundColor: c.successLight || '#e1f5ee' }]}>
-          <Text style={[styles.inCartText, { color: c.success || '#1D9E75' }]}>
-            ✓ {alreadyInCart.quantity} units in cart · Tap to view cart →
+        <TouchableOpacity onPress={goToCart}
+          style={[sStyles.inCartBanner, { backgroundColor: c.successLight || '#e1f5ee' }]}>
+          <Text style={[sStyles.inCartText, { color: c.success || '#1D9E75' }]}>
+            ✓ {alreadyInCart.quantity} units in cart · Tap to view →
           </Text>
         </TouchableOpacity>
       )}
 
-      {/* Price Card */}
-      <View style={[styles.card, { backgroundColor: c.surface, shadowColor: c.text }]}>
-        {listing.has_offer && (
-          <Text style={[styles.oldPrice, { color: c.textMuted }]}>₹{listing.price}/unit</Text>
-        )}
-        <Text style={[styles.price, { color: c.primary }]}>₹{listing.effective_price}/unit</Text>
-        {listing.has_offer && (
-          <View style={[styles.offerBadge, { backgroundColor: c.successLight }]}>
-            <Text style={[styles.offerText, { color: c.success }]}>Special offer</Text>
+      {/* Scrollable content */}
+      <ScrollView showsVerticalScrollIndicator={false}>
+
+        <CollapsibleSection title="Product Details" defaultOpen={false} colors={c}>
+          <DetailRow label="Brand" value={listing.brand_name} colors={c} />
+          <DetailRow label="Category" value={listing.category_name} colors={c} />
+          {listing.hsn_code && <DetailRow label="HSN Code" value={listing.hsn_code} colors={c} />}
+          {getAttributes(listing.attributes).map(([k, v]) => (
+            <DetailRow key={k} label={k.replace(/_/g, ' ')} value={String(v)} colors={c} />
+          ))}
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Seller Details" defaultOpen={false} colors={c}>
+          <DetailRow label="Seller" value={listing.wholesaler_name} colors={c} />
+          <DetailRow label="Delivery" value={`${listing.delivery_days} day(s)`} colors={c} />
+          <DetailRow label="Min Order" value={`${listing.min_order_qty} units`} colors={c} />
+          <DetailRow label="Stock" value={`${listing.stock_qty} units available`} colors={c} />
+        </CollapsibleSection>
+
+        {/* Quantity + Add to Cart (bottom) */}
+        <View style={[sStyles.card, { backgroundColor: c.surface }]}>
+          <View style={sStyles.qtyRow}>
+            <TouchableOpacity
+              style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
+              onPress={() => setQuantity(q => Math.max(listing.min_order_qty, (parseInt(q) || 1) - 1))}>
+              <Text style={[sStyles.qtyBtnText, { color: c.primary }]}>−</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[sStyles.qtyValue, { color: c.text, borderBottomWidth: 1, borderBottomColor: c.border }]}
+              value={String(quantity)}
+              onChangeText={v => {
+                const n = parseInt(v);
+                if (!isNaN(n) && n > 0) setQuantity(n);
+                else if (v === '') setQuantity('');
+              }}
+              onBlur={() => {
+                const n = parseInt(quantity);
+                setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty);
+              }}
+              keyboardType="numeric"
+              selectTextOnFocus
+            />
+            <TouchableOpacity
+              style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
+              onPress={() => setQuantity(q => (parseInt(q) || 0) + 1)}>
+              <Text style={[sStyles.qtyBtnText, { color: c.primary }]}>+</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
+          <Text style={[sStyles.totalText, { color: c.text }]}>Total: ₹{total}</Text>
+          {qty < listing.min_order_qty && (
+            <Text style={[sStyles.moqWarning, { color: c.error || '#FF453A' }]}>
+              Min order: {listing.min_order_qty} units
+            </Text>
+          )}
+        </View>
 
-      {/* Product Details */}
-      <View style={[styles.card, { backgroundColor: c.surface, shadowColor: c.text }]}>
-        <Text style={[styles.sectionTitle, { color: c.text }]}>Product Details</Text>
-        <DetailRow label="Brand" value={listing.brand_name} colors={c} />
-        <DetailRow label="Category" value={listing.category_name} colors={c} />
-        <DetailRow label="HSN Code" value={listing.hsn_code} colors={c} />
-        {getAttributes(listing.attributes).map(([k, v]) => (
-          <DetailRow key={k} label={k.replace(/_/g, ' ')} value={String(v)} colors={c} />
-        ))}
-      </View>
-
-      {/* Seller Details */}
-      <View style={[styles.card, { backgroundColor: c.surface, shadowColor: c.text }]}>
-        <Text style={[styles.sectionTitle, { color: c.text }]}>Seller Details</Text>
-        <DetailRow label="Seller" value={listing.wholesaler_name} colors={c} />
-        <DetailRow label="Delivery" value={`${listing.delivery_days} day(s)`} colors={c} />
-        <DetailRow label="Min Order" value={`${listing.min_order_qty} units`} colors={c} />
-        <DetailRow label="Stock" value={`${listing.stock_qty} units available`} colors={c} />
-      </View>
-
-      {/* Quantity Selector */}
-      <View style={[styles.card, { backgroundColor: c.surface, shadowColor: c.text }]}>
-        <Text style={[styles.sectionTitle, { color: c.text }]}>Select Quantity</Text>
-        <View style={styles.qtyRow}>
+        {/* Save + Add to Cart buttons */}
+        <View style={sStyles.btnRow}>
           <TouchableOpacity
-            style={[styles.qtyBtn, { backgroundColor: c.primaryLight }]}
-            onPress={() => setQuantity(Math.max(listing.min_order_qty, quantity - 1))}>
-            <Text style={[styles.qtyBtnText, { color: c.primary }]}>−</Text>
+            style={[sStyles.wishlistBtn, { borderColor: wishlisted ? '#FF453A' : c.border, backgroundColor: wishlisted ? '#2A0A0A' : c.surface }]}
+            onPress={toggleWishlist}>
+            <Text style={sStyles.wishlistBtnIcon}>{wishlisted ? '❤️' : '🤍'}</Text>
+            <Text style={[sStyles.wishlistBtnText, { color: wishlisted ? '#FF453A' : c.textMuted }]}>
+              {wishlisted ? 'Saved' : 'Save'}
+            </Text>
           </TouchableOpacity>
-          <Text style={[styles.qtyValue, { color: c.text }]}>{quantity}</Text>
           <TouchableOpacity
-            style={[styles.qtyBtn, { backgroundColor: c.primaryLight }]}
-            onPress={() => setQuantity(quantity + 1)}>
-            <Text style={[styles.qtyBtnText, { color: c.primary }]}>+</Text>
+            style={[sStyles.addBtn, { backgroundColor: added ? '#1D9E75' : c.primary }]}
+            onPress={handleAddToCart}>
+            <Text style={[sStyles.addBtnText, { color: '#fff' }]}>
+              {added ? '✓ Added to Cart!' : alreadyInCart ? 'Update Cart' : 'Add to Cart'}
+            </Text>
           </TouchableOpacity>
         </View>
-        <Text style={[styles.totalText, { color: c.text }]}>
-          Total: ₹{(listing.effective_price * quantity).toLocaleString('en-IN')}
-        </Text>
-        {quantity < listing.min_order_qty && (
-          <Text style={[styles.moqWarning, { color: c.error }]}>
-            Min order: {listing.min_order_qty} units
-          </Text>
+
+        {cartItems.length > 0 && (
+          <TouchableOpacity
+            style={[sStyles.viewCartBtn, { borderColor: c.primary, backgroundColor: c.primaryLight }]}
+            onPress={goToCart}>
+            <Text style={[sStyles.viewCartText, { color: c.primary }]}>
+              🛒 View Cart ({cartItems.length} item{cartItems.length > 1 ? 's' : ''}) →
+            </Text>
+          </TouchableOpacity>
         )}
-      </View>
 
-      {/* Buttons */}
-      <View style={styles.btnRow}>
-        <TouchableOpacity
-          style={[styles.wishlistBtn, {
-            borderColor: wishlisted ? '#FF453A' : c.border,
-            backgroundColor: wishlisted ? '#2A0A0A' : c.surface,
-          }]}
-          onPress={toggleWishlist}>
-          <Text style={styles.wishlistBtnIcon}>{wishlisted ? '❤️' : '🤍'}</Text>
-          <Text style={[styles.wishlistBtnText, { color: wishlisted ? '#FF453A' : c.textMuted }]}>
-            {wishlisted ? 'Saved' : 'Save'}
-          </Text>
-        </TouchableOpacity>
+        <View style={{ height: 16 }} />
+      </ScrollView>
 
-        <TouchableOpacity
-          style={[styles.addBtn, {
-            backgroundColor: added ? (c.success || '#1D9E75') : c.primary
-          }]}
-          onPress={handleAddToCart}>
-          <Text style={[styles.addBtnText, { color: c.textOnPrimary }]}>
-            {added ? '✓ Added to Cart!' : alreadyInCart ? 'Update Cart' : 'Add to Cart'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* View Cart button if items in cart */}
-      {cartItems.length > 0 && (
-        <TouchableOpacity
-          style={[styles.viewCartBtn, { borderColor: c.primary, backgroundColor: c.primaryLight }]}
-          onPress={goToCart}>
-          <Text style={[styles.viewCartText, { color: c.primary }]}>
-            🛒 View Cart ({cartItems.length} item{cartItems.length > 1 ? 's' : ''}) →
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={{ height: 32 }} />
-    </ScrollView>
-  );
-}
-
-function DetailRow({ label, value, colors: c }) {
-  return (
-    <View style={[styles.detailRow, { borderBottomColor: c.borderLight }]}>
-      <Text style={[styles.detailLabel, { color: c.textMuted }]}>{label}</Text>
-      <Text style={[styles.detailValue, { color: c.text }]}>{value}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { padding: 20, paddingTop: 48 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  backBtn: {},
-  backText: { color: 'rgba(255,255,255,0.75)', fontSize: 14 },
-  heartBtn: { padding: 4 },
-  heartIcon: { fontSize: 26 },
-  productName: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
-  brand: { fontSize: 16, color: '#B5D4F4', marginTop: 4 },
-  category: { fontSize: 13, color: '#85B7EB', marginTop: 2 },
-  wholesalerBadge: { alignSelf: 'flex-start', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginTop: 10 },
-  wholesalerBadgeText: { fontSize: 12, color: '#FFFFFF', fontWeight: '500' },
-  inCartBanner: { margin: 12, borderRadius: 10, padding: 12, alignItems: 'center' },
+const sStyles = StyleSheet.create({
+  header: { paddingHorizontal: 16, paddingTop: 36, paddingBottom: 10 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  iconBtn: { padding: 4 },
+  iconBtnText: { color: 'rgba(255,255,255,0.85)', fontSize: 20 },
+  productName: { fontSize: 17, fontWeight: '800', color: '#fff', marginBottom: 2 },
+  brand: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 6 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  oldPrice: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textDecorationLine: 'line-through' },
+  price: { fontSize: 22, fontWeight: '800', color: '#fff' },
+  perUnit: { fontSize: 12, fontWeight: '400', color: 'rgba(255,255,255,0.7)' },
+  offerBadge: { backgroundColor: '#F2C94C', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 3 },
+  offerText: { fontSize: 11, fontWeight: '800', color: '#000' },
+  headerCartRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
+  qtyRowInline: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, padding: 4 },
+  qtyBtnSmall: { width: 30, height: 30, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  qtyBtnSmallText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  qtyValueSmall: { color: '#fff', fontSize: 15, fontWeight: '700', marginHorizontal: 10, minWidth: 32, textAlign: 'center' },
+  headerCartBtn: { flex: 1, borderRadius: 10, height: 40, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
+  headerCartBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  totalInHeader: { fontSize: 11, color: 'rgba(255,255,255,0.65)', textAlign: 'right' },
+  inCartBanner: { marginHorizontal: 12, marginTop: 8, borderRadius: 10, padding: 10, alignItems: 'center' },
   inCartText: { fontSize: 13, fontWeight: '600' },
-  card: { margin: 12, marginTop: 12, borderRadius: 12, padding: 16, elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
-  oldPrice: { fontSize: 14, textDecorationLine: 'line-through' },
-  price: { fontSize: 28, fontWeight: 'bold' },
-  offerBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 6 },
-  offerText: { fontSize: 12, fontWeight: '600' },
-  sectionTitle: { fontSize: 15, fontWeight: '600', marginBottom: 12 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 0.5 },
+  card: { marginHorizontal: 12, marginTop: 10, borderRadius: 12, overflow: 'hidden', elevation: 1 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '700' },
+  sectionBody: { paddingHorizontal: 14, paddingBottom: 10 },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 0.5 },
   detailLabel: { fontSize: 13, textTransform: 'capitalize' },
   detailValue: { fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  qtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, paddingHorizontal: 14 },
   qtyBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   qtyBtnText: { fontSize: 22, fontWeight: 'bold' },
-  qtyValue: { fontSize: 24, fontWeight: 'bold', marginHorizontal: 24 },
-  totalText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
-  moqWarning: { fontSize: 12, textAlign: 'center', marginTop: 4 },
-  btnRow: { flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 4 },
-  wishlistBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, height: 52, paddingHorizontal: 16, borderWidth: 1, gap: 6 },
+  qtyValue: { fontSize: 22, fontWeight: 'bold', marginHorizontal: 20, minWidth: 48, textAlign: 'center' },
+  totalText: { fontSize: 15, fontWeight: '600', textAlign: 'center', paddingBottom: 10 },
+  moqWarning: { fontSize: 12, textAlign: 'center', marginTop: 2, paddingBottom: 8 },
+  btnRow: { flexDirection: 'row', gap: 10, marginHorizontal: 12, marginTop: 10 },
+  wishlistBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, height: 50, paddingHorizontal: 14, borderWidth: 1, gap: 6 },
   wishlistBtnIcon: { fontSize: 18 },
   wishlistBtnText: { fontSize: 13, fontWeight: '600' },
-  addBtn: { flex: 1, borderRadius: 12, height: 52, justifyContent: 'center', alignItems: 'center' },
-  addBtnText: { fontSize: 16, fontWeight: '600' },
-  viewCartBtn: { marginHorizontal: 16, marginTop: 10, borderRadius: 12, height: 48, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5 },
-  viewCartText: { fontSize: 15, fontWeight: '600' },
+  addBtn: { flex: 1, borderRadius: 12, height: 50, justifyContent: 'center', alignItems: 'center' },
+  addBtnText: { fontSize: 15, fontWeight: '600' },
+  viewCartBtn: { marginHorizontal: 12, marginBottom: 10, marginTop: 4, borderRadius: 12, height: 46, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5 },
+  viewCartText: { fontSize: 14, fontWeight: '600' },
 });

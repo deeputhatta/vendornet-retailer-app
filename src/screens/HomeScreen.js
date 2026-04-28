@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, FlatList, TouchableOpacity,
+  View, Text, TextInput, FlatList, TouchableOpacity, Animated,
   StyleSheet, ActivityIndicator, ScrollView, StatusBar,
   Dimensions
 } from 'react-native';
@@ -15,9 +15,16 @@ import VendorNetLogo from '../components/VendorNetLogo';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 const CATEGORY_ICONS = {
-  'cement': '🏗', 'steel-tmt': '⚙️', 'paint': '🎨',
-  'electrical': '⚡', 'plumbing': '🔧', 'hardware': '🔨',
-  'tiles': '🪟', 'power-tools': '🔌', 'wood': '🪵',
+  'grocery-fmcg': '🛒',
+  'pharma-medicine': '💊',
+  'stationery-paper': '📝',
+  'bags-luggage': '👜',
+  'electronics': '📱',
+  'textiles-garments': '👕',
+  'food-beverage': '🍱',
+  'cleaning-hygiene': '🧹',
+  'hardware-tools': '🔧',
+  'others': '📦',
 };
 const getCategoryEmoji = (slug) => CATEGORY_ICONS[slug] || '📦';
 
@@ -45,6 +52,18 @@ export default function HomeScreen({ navigation }) {
   const [pendingOrders, setPendingOrders] = useState([]);
   const [dispatchedOrders, setDispatchedOrders] = useState([]);
   const [bestDeal, setBestDeal] = useState(null);
+
+  // Pulse animation for grab deal
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.03, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
   const [lowStockItems, setLowStockItems] = useState([]);
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -306,7 +325,7 @@ export default function HomeScreen({ navigation }) {
           </View>
 
           {/* SMART INFO CARDS */}
-          {(pendingOrders.length > 0 || dispatchedOrders.length > 0 || bestDeal || lowStockItems.length > 0) && (
+          {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.smartCardsScroll}>
 
               {/* Pending orders */}
@@ -356,23 +375,45 @@ export default function HomeScreen({ navigation }) {
               )}
 
               {/* Best deal */}
+              {/* Always visible quick actions */}
+              <TouchableOpacity
+                style={[styles.smartCard, { backgroundColor: c.primaryLight, borderColor: c.primary }]}
+                onPress={() => navigation.navigate('Category', { category: { category_id: null, name: 'All Products', slug: '' } })}>
+                <Text style={styles.smartCardIcon}>🛒</Text>
+                <Text style={[styles.smartCardTitle, { color: c.primary }]}>Browse</Text>
+                <Text style={[styles.smartCardSub, { color: c.primary, opacity: 0.75 }]}>Find products</Text>
+                <Text style={[styles.smartCardAction, { color: c.primary }]}>Shop Now →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.smartCard, { backgroundColor: c.surface, borderColor: c.border }]}
+                onPress={() => navigation.navigate('Orders')}>
+                <Text style={styles.smartCardIcon}>📦</Text>
+                <Text style={[styles.smartCardTitle, { color: c.text }]}>My Orders</Text>
+                <Text style={[styles.smartCardSub, { color: c.textMuted, opacity: 0.75 }]}>Track & reorder</Text>
+                <Text style={[styles.smartCardAction, { color: c.primary }]}>View →</Text>
+              </TouchableOpacity>
               {bestDeal && (
-                <TouchableOpacity
-                  style={[styles.smartCard, { backgroundColor: '#003A10', borderColor: '#30D158' }]}
-                  onPress={() => navigateToProduct({ ...bestDeal, effective_price: bestDeal.offer_price, has_offer: true })}>
-                  <Text style={styles.smartCardIcon}>🔥</Text>
-                  <Text style={[styles.smartCardTitle, { color: '#30D158' }]}>
-                    {Math.round(((bestDeal.price - bestDeal.offer_price) / bestDeal.price) * 100)}% OFF Today
-                  </Text>
-                  <Text style={[styles.smartCardSub, { color: '#30D158', opacity: 0.75 }]} numberOfLines={1}>
-                    {bestDeal.generic_name} — {bestDeal.brand_name}
-                  </Text>
-                  <Text style={[styles.smartCardAction, { color: '#30D158' }]}>Grab Deal →</Text>
-                </TouchableOpacity>
+                
+                  <TouchableOpacity
+                    style={[styles.smartCard, { backgroundColor: '#003A10', borderColor: '#30D158', borderWidth: 2, shadowColor: '#30D158', shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 }]}
+                    onPress={() => navigateToProduct({ ...bestDeal, effective_price: bestDeal.offer_price, has_offer: true })}>
+                    <Text style={styles.smartCardIcon}>🔥</Text>
+                    <View style={{ backgroundColor: '#30D158', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 }}>
+                      <Text style={{ color: '#000', fontSize: 10, fontWeight: '800' }}>
+                        {Math.round(((bestDeal.price - bestDeal.offer_price) / bestDeal.price) * 100)}% OFF
+                      </Text>
+                    </View>
+                    <Text style={[styles.smartCardTitle, { color: '#30D158' }]}>Today's Deal</Text>
+                    <Text style={[styles.smartCardSub, { color: '#30D158', opacity: 0.85 }]} numberOfLines={1}>
+                      {bestDeal.generic_name} — {bestDeal.brand_name}
+                    </Text>
+                    <Text style={[styles.smartCardAction, { color: '#30D158', fontWeight: '800' }]}>⚡ Grab Deal →</Text>
+                  </TouchableOpacity>
+                
               )}
 
             </ScrollView>
-          )}
+          }
 
           {/* OFFERS */}
           {offers.length > 0 && (
@@ -550,12 +591,12 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 13, fontWeight: '800' },
   statLabel: { fontSize: 9, marginTop: 1, fontWeight: '600', opacity: 0.8 },
 
-  smartCardsScroll: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
-  smartCard: { width: 145, borderRadius: 12, padding: 10, borderWidth: 1.5, gap: 4 },
-  smartCardIcon: { fontSize: 18, marginBottom: 1 },
-  smartCardTitle: { fontSize: 12, fontWeight: '800' },
-  smartCardSub: { fontSize: 10, lineHeight: 14 },
-  smartCardAction: { fontSize: 10, fontWeight: '700', marginTop: 4 },
+  smartCardsScroll: { paddingHorizontal: 12, paddingTop: 6, gap: 10 },
+  smartCard: { width: 130, borderRadius: 10, padding: 8, borderWidth: 1, gap: 2 },
+  smartCardIcon: { fontSize: 18, marginBottom: 2 },
+  smartCardTitle: { fontSize: 11, fontWeight: '700' },
+  smartCardSub: { fontSize: 10, lineHeight: 13 },
+  smartCardAction: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, marginTop: 18, marginBottom: 10 },
   sectionTitle: { fontSize: 15, fontWeight: '700' },

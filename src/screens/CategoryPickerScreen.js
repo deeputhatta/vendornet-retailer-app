@@ -11,14 +11,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../services/api';
 
 const CATEGORY_CONFIG = {
-  'Cement':      { icon: '🏗', color: '#e6f1fb', textColor: '#185FA5' },
-  'Steel / TMT': { icon: '⚙️', color: '#e1f5ee', textColor: '#1D9E75' },
-  'Paint':       { icon: '🎨', color: '#fdf4ff', textColor: '#9333ea' },
-  'Electrical':  { icon: '⚡', color: '#fefce8', textColor: '#ca8a04' },
-  'Plumbing':    { icon: '🔧', color: '#eff6ff', textColor: '#2563eb' },
-  'Hardware':    { icon: '🔨', color: '#fff7ed', textColor: '#ea580c' },
-  'Tiles':       { icon: '🪟', color: '#f0fdf4', textColor: '#16a34a' },
-  'Power Tools': { icon: '🔌', color: '#fef2f2', textColor: '#dc2626' },
+  'Grocery & FMCG':      { icon: '🛒', color: '#e6f1fb', textColor: '#185FA5' },
+  'Pharma & Medicine':   { icon: '💊', color: '#fdf4ff', textColor: '#9333ea' },
+  'Stationery & Paper':  { icon: '📝', color: '#fefce8', textColor: '#ca8a04' },
+  'Bags & Luggage':      { icon: '👜', color: '#fff7ed', textColor: '#ea580c' },
+  'Electronics':         { icon: '📱', color: '#eff6ff', textColor: '#2563eb' },
+  'Textiles & Garments': { icon: '👕', color: '#f0fdf4', textColor: '#16a34a' },
+  'Food & Beverage':     { icon: '🍱', color: '#fef2f2', textColor: '#dc2626' },
+  'Cleaning & Hygiene':  { icon: '🧹', color: '#e1f5ee', textColor: '#1D9E75' },
+  'Hardware & Tools':    { icon: '🔧', color: '#fff7ed', textColor: '#ea580c' },
+  'Others':              { icon: '📦', color: '#f8fafc', textColor: '#475569' },
 };
 
 const DEFAULT_CONFIG = { icon: '📦', color: '#f8fafc', textColor: '#475569' };
@@ -48,10 +50,7 @@ export default function CategoryPickerScreen({ navigation, route }) {
         api.get('/categories/my').catch(() => ({ data: { categories: [] } })),
       ]);
       const cats = allRes.data.categories || [];
-      // Add Others option
-      if (!cats.find(cat => cat.name === 'Others')) {
-        cats.push({ category_id: 'others', name: 'Others', slug: 'others' });
-      }
+      // Others category comes from API with real UUID
       setCategories(cats);
       setSelected(myRes.data.categories?.map(cat => cat.category_id) || []);
     } catch (err) { console.error(err); }
