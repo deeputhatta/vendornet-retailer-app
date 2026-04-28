@@ -202,7 +202,7 @@ export default function ReportDownloadScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customFrom ? c.primary : c.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
                   onPress={() => setShowFromPicker(true)}>
-                  <Text style={{ color: customFrom ? c.text : c.textMuted, fontSize: 14 }}>{customFrom || 'Select date'}</Text>
+                  <Text style={{ color: customFrom ? c.text : c.textMuted, fontSize: 14 }}>{customFrom ? formatDisplayDate(customFrom) : 'DD/MM/YYYY'}</Text>
                   <Text style={{ fontSize: 16 }}>📅</Text>
                 </TouchableOpacity>
                 {showFromPicker && (
@@ -222,7 +222,7 @@ export default function ReportDownloadScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={[styles.dateInput, { backgroundColor: c.surfaceSecondary||'#2C2C2E', borderColor: customTo ? c.primary : c.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
                   onPress={() => setShowToPicker(true)}>
-                  <Text style={{ color: customTo ? c.text : c.textMuted, fontSize: 14 }}>{customTo || 'Select date'}</Text>
+                  <Text style={{ color: customTo ? c.text : c.textMuted, fontSize: 14 }}>{customTo ? formatDisplayDate(customTo) : 'DD/MM/YYYY'}</Text>
                   <Text style={{ fontSize: 16 }}>📅</Text>
                 </TouchableOpacity>
                 {showToPicker && (
