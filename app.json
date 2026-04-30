@@ -38,11 +38,11 @@
       ],
       "@react-native-community/datetimepicker"
     ],
-    "owner": "pattottil",
     "extra": {
       "eas": {
-        "projectId": "c0864499-db2c-4316-ae0f-b8d73e16ca32"
+        "projectId": "2b4d42c5-08fb-45ba-b1e2-6c14ec2c510b"
       }
-    }
+    },
+    "owner": "deepusthatta"
   }
 }

@@ -6,6 +6,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import api from '../services/api';
+import ReviewSection from '../components/ReviewSection';
 
 const STATUS_CONFIG = {
   pending:          { color: '#F2C94C', bg: '#2A1F00', label: 'Pending' },
@@ -19,12 +20,15 @@ const STATUS_CONFIG = {
   auto_cancelled:   { color: '#FF9500', bg: '#2A1500', label: 'Cancelled' },
 };
 
+const REVIEWABLE = ['delivered', 'completed', 'invoice_uploaded'];
+
 export default function OrderDetailScreen({ route, navigation }) {
   const { orderId } = route.params;
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(null);
   const [reordering, setReordering] = useState(false);
+  const [reviewingWholesaler, setReviewingWholesaler] = useState(null);
   const { theme } = useTheme();
   const c = theme.colors;
   const { addToCart } = useCart();
@@ -43,81 +47,60 @@ export default function OrderDetailScreen({ route, navigation }) {
   };
 
   const reorder = async () => {
-    Alert.alert(
-      'Reorder',
-      'Add all items from this order to cart?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reorder', onPress: async () => {
-            setReordering(true);
-            try {
-              order.sub_orders.forEach(sub => {
-                sub.items.forEach(item => {
-                  addToCart({
-                    listing_id: item.listing_id,
-                    quantity: item.quantity,
-                    unit_price: item.unit_price,
-                    product_name: item.generic_name,
-                    brand_name: item.brand_name,
-                    wholesaler_name: sub.wholesaler_name,
-                    wholesaler_id: sub.wholesaler_id,
-                    min_order_qty: item.min_order_qty || 1,
-                  });
+    Alert.alert('Reorder', 'Add all items from this order to cart?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reorder', onPress: async () => {
+          setReordering(true);
+          try {
+            order.sub_orders.forEach(sub => {
+              sub.items.forEach(item => {
+                addToCart({
+                  listing_id: item.listing_id,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  product_name: item.generic_name,
+                  brand_name: item.brand_name,
+                  wholesaler_name: sub.wholesaler_name,
+                  wholesaler_id: sub.wholesaler_id,
+                  min_order_qty: item.min_order_qty || 1,
                 });
               });
-              Alert.alert('✓ Added to Cart', 'All items added to your cart.', [
-                { text: 'View Cart', onPress: () => navigation.navigate('Main', { screen: 'Cart' }) },
-                { text: 'OK' }
-              ]);
-            } catch (err) {
-              Alert.alert('Error', 'Failed to reorder');
-            } finally {
-              setReordering(false);
-            }
+            });
+            Alert.alert('✓ Added to Cart', 'All items added to your cart.', [
+              { text: 'View Cart', onPress: () => navigation.navigate('Main', { screen: 'Cart' }) },
+              { text: 'OK' }
+            ]);
+          } catch (err) {
+            Alert.alert('Error', 'Failed to reorder');
+          } finally {
+            setReordering(false);
           }
         }
-      ]
-    );
+      }
+    ]);
   };
 
   const cancelSubOrder = (sub) => {
     if (!['pending', 'accepted'].includes(sub.status)) {
-      Alert.alert(
-        'Cannot Cancel',
-        `This order from ${sub.wholesaler_name} is already ${STATUS_CONFIG[sub.status]?.label || sub.status} and cannot be cancelled.`
-      );
+      Alert.alert('Cannot Cancel', `This order from ${sub.wholesaler_name} is already ${STATUS_CONFIG[sub.status]?.label || sub.status}.`);
       return;
     }
-
-    Alert.alert(
-      'Cancel Order',
-      `Cancel your order from ${sub.wholesaler_name}?\n\n₹${parseFloat(sub.total_amount).toLocaleString('en-IN')} worth of items will be cancelled.\n\nThis cannot be undone.`,
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            setCancelling(sub.sub_order_id);
-            try {
-              await api.put(`/orders/${sub.sub_order_id}/cancel-sub`, {
-                reason: 'Cancelled by retailer'
-              });
-              Alert.alert(
-                '✓ Cancelled',
-                `Order from ${sub.wholesaler_name} has been cancelled.`,
-                [{ text: 'OK', onPress: () => loadOrder() }]
-              );
-            } catch (err) {
-              Alert.alert('Error', err.response?.data?.error || 'Failed to cancel');
-            } finally {
-              setCancelling(null);
-            }
-          }
+    Alert.alert('Cancel Order', `Cancel order from ${sub.wholesaler_name}?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes, Cancel', style: 'destructive',
+        onPress: async () => {
+          setCancelling(sub.sub_order_id);
+          try {
+            await api.put(`/orders/${sub.sub_order_id}/cancel-sub`, { reason: 'Cancelled by retailer' });
+            Alert.alert('✓ Cancelled', `Order from ${sub.wholesaler_name} cancelled.`, [{ text: 'OK', onPress: loadOrder }]);
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || 'Failed to cancel');
+          } finally { setCancelling(null); }
         }
-      ]
-    );
+      }
+    ]);
   };
 
   if (loading) return (
@@ -138,41 +121,44 @@ export default function OrderDetailScreen({ route, navigation }) {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: c.primary }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtn}>← Back</Text>
+          <Text style={styles.backBtn}>← Orders</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Order #{order.order_id.slice(0, 8).toUpperCase()}</Text>
-        <Text style={styles.headerDate}>
-          {new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-        </Text>
+        <Text style={styles.headerTitle}>Order #{orderId.slice(0, 8).toUpperCase()}</Text>
+        <Text style={styles.headerDate}>{new Date(order.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
         <Text style={styles.headerAmount}>₹{parseFloat(order.total_amount).toLocaleString('en-IN')}</Text>
       </View>
 
       <View style={styles.content}>
-
-        {/* Action buttons */}
+        {/* Reorder button */}
         <View style={styles.actionBtnsRow}>
           <TouchableOpacity
             style={[styles.reorderBtn, { backgroundColor: c.primary }]}
             onPress={reorder}
             disabled={reordering}>
-            <Text style={styles.reorderIcon}>🔄</Text>
-            <Text style={styles.reorderText}>{reordering ? 'Adding...' : 'Reorder'}</Text>
+            {reordering ? <ActivityIndicator color="#fff" size="small" /> : (
+              <>
+                <Text style={styles.reorderIcon}>🔄</Text>
+                <Text style={styles.reorderText}>Reorder All</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Delivery address */}
-        <View style={[styles.card, { backgroundColor: c.surface }]}>
-          <Text style={[styles.cardTitle, { color: c.text }]}>📍 Delivery Address</Text>
-          <Text style={[styles.addressText, { color: c.textSecondary }]}>
-            {order.retailer_address || 'Address not available'}
-          </Text>
-        </View>
+        {order.retailer_address && (
+          <View style={[styles.card, { backgroundColor: c.surface }]}>
+            <Text style={[styles.cardTitle, { color: c.text }]}>📍 Delivery Address</Text>
+            <Text style={[styles.addressText, { color: c.textMuted }]}>{order.retailer_address}</Text>
+          </View>
+        )}
 
         {/* Sub orders */}
         {order.sub_orders?.map((sub) => {
           const config = STATUS_CONFIG[sub.status] || { color: c.textMuted, bg: c.surfaceSecondary, label: sub.status };
           const isCancellable = ['pending', 'accepted'].includes(sub.status);
           const isCancelling = cancelling === sub.sub_order_id;
+          const canReview = REVIEWABLE.includes(sub.status);
+          const isReviewing = reviewingWholesaler === sub.wholesaler_id;
 
           return (
             <View key={sub.sub_order_id} style={[styles.card, { backgroundColor: c.surface }]}>
@@ -180,9 +166,7 @@ export default function OrderDetailScreen({ route, navigation }) {
               {/* Wholesaler header */}
               <View style={[styles.wholesalerHeader, { borderBottomColor: c.borderLight }]}>
                 <View style={[styles.wholesalerAvatar, { backgroundColor: c.primary }]}>
-                  <Text style={styles.wholesalerAvatarText}>
-                    {sub.wholesaler_name?.charAt(0).toUpperCase()}
-                  </Text>
+                  <Text style={styles.wholesalerAvatarText}>{sub.wholesaler_name?.charAt(0).toUpperCase()}</Text>
                 </View>
                 <View style={styles.wholesalerInfo}>
                   <Text style={[styles.wholesalerName, { color: c.text }]}>{sub.wholesaler_name}</Text>
@@ -205,22 +189,16 @@ export default function OrderDetailScreen({ route, navigation }) {
                   <View style={styles.itemInfo}>
                     <Text style={[styles.itemName, { color: c.text }]}>{item.generic_name}</Text>
                     <Text style={[styles.itemBrand, { color: c.primary }]}>{item.brand_name}</Text>
-                    <Text style={[styles.itemQty, { color: c.textMuted }]}>
-                      Qty: {item.quantity} × ₹{item.unit_price}
-                    </Text>
+                    <Text style={[styles.itemQty, { color: c.textMuted }]}>Qty: {item.quantity} × ₹{item.unit_price}</Text>
                   </View>
-                  <Text style={[styles.itemTotal, { color: c.text }]}>
-                    ₹{parseFloat(item.item_total).toLocaleString('en-IN')}
-                  </Text>
+                  <Text style={[styles.itemTotal, { color: c.text }]}>₹{parseFloat(item.item_total).toLocaleString('en-IN')}</Text>
                 </View>
               ))}
 
               {/* Sub order total */}
               <View style={[styles.subTotal, { borderTopColor: c.borderLight }]}>
                 <Text style={[styles.subTotalLabel, { color: c.textMuted }]}>Subtotal</Text>
-                <Text style={[styles.subTotalValue, { color: c.primary }]}>
-                  ₹{parseFloat(sub.total_amount).toLocaleString('en-IN')}
-                </Text>
+                <Text style={[styles.subTotalValue, { color: c.primary }]}>₹{parseFloat(sub.total_amount).toLocaleString('en-IN')}</Text>
               </View>
 
               {/* Sub order actions */}
@@ -228,27 +206,44 @@ export default function OrderDetailScreen({ route, navigation }) {
                 {sub.status === 'dispatched' && (
                   <TouchableOpacity
                     style={[styles.trackBtn, { borderColor: '#F2C94C' }]}
-                    onPress={() => navigation.navigate('DeliveryTracking', {
-                      subOrderId: sub.sub_order_id,
-                      wholesalerName: sub.wholesaler_name,
-                    })}>
+                    onPress={() => navigation.navigate('DeliveryTracking', { subOrderId: sub.sub_order_id, wholesalerName: sub.wholesaler_name })}>
                     <Text style={styles.trackBtnIcon}>🚚</Text>
                     <Text style={[styles.trackBtnText, { color: '#F2C94C' }]}>Track Delivery →</Text>
                   </TouchableOpacity>
                 )}
 
                 {isCancellable && (
-                  <TouchableOpacity
-                    style={styles.cancelSubBtn}
-                    onPress={() => cancelSubOrder(sub)}
-                    disabled={isCancelling}>
+                  <TouchableOpacity style={styles.cancelSubBtn} onPress={() => cancelSubOrder(sub)} disabled={isCancelling}>
                     {isCancelling
                       ? <ActivityIndicator size="small" color="#FF453A" />
                       : <Text style={styles.cancelSubText}>✕ Cancel this order</Text>
                     }
                   </TouchableOpacity>
                 )}
+
+                {/* Review wholesaler button */}
+                {canReview && (
+                  <TouchableOpacity
+                    style={[styles.reviewBtn, { borderColor: c.primary, backgroundColor: isReviewing ? c.primaryLight : 'transparent' }]}
+                    onPress={() => setReviewingWholesaler(isReviewing ? null : sub.wholesaler_id)}>
+                    <Text style={{ fontSize: 14 }}>⭐</Text>
+                    <Text style={[styles.reviewBtnText, { color: c.primary }]}>
+                      {isReviewing ? 'Hide Review' : `Rate ${sub.wholesaler_name}`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
+
+              {/* Review section */}
+              {canReview && isReviewing && (
+                <ReviewSection
+                  entityType="wholesaler"
+                  entityId={sub.wholesaler_id}
+                  colors={c}
+                  title={`Review ${sub.wholesaler_name}`}
+                  subtitle="How was your experience with this supplier?"
+                />
+              )}
             </View>
           );
         })}
@@ -257,21 +252,15 @@ export default function OrderDetailScreen({ route, navigation }) {
         <View style={[styles.totalCard, { backgroundColor: c.surface }]}>
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, { color: c.textMuted }]}>Order Total</Text>
-            <Text style={[styles.totalValue, { color: c.primary }]}>
-              ₹{parseFloat(order.total_amount).toLocaleString('en-IN')}
-            </Text>
+            <Text style={[styles.totalValue, { color: c.primary }]}>₹{parseFloat(order.total_amount).toLocaleString('en-IN')}</Text>
           </View>
           <View style={[styles.totalRow, { marginTop: 6 }]}>
             <Text style={[styles.totalLabel, { color: c.textMuted }]}>Items</Text>
-            <Text style={[styles.totalLabel, { color: c.textSecondary }]}>
-              {order.sub_orders?.reduce((sum, s) => sum + (s.items?.length || 0), 0)} products
-            </Text>
+            <Text style={[styles.totalLabel, { color: c.textMuted }]}>{order.sub_orders?.reduce((sum, s) => sum + (s.items?.length || 0), 0)} products</Text>
           </View>
           <View style={[styles.totalRow, { marginTop: 6 }]}>
             <Text style={[styles.totalLabel, { color: c.textMuted }]}>Suppliers</Text>
-            <Text style={[styles.totalLabel, { color: c.textSecondary }]}>
-              {order.sub_orders?.length} wholesalers
-            </Text>
+            <Text style={[styles.totalLabel, { color: c.textMuted }]}>{order.sub_orders?.length} wholesalers</Text>
           </View>
         </View>
 
@@ -296,7 +285,7 @@ const styles = StyleSheet.create({
   reorderIcon: { fontSize: 16 },
   reorderText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
   card: { borderRadius: 16, marginBottom: 14, overflow: 'hidden', elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
-  cardTitle: { fontSize: 14, fontWeight: '700', padding: 14, paddingBottom: 8 },
+  cardTitle: { fontSize: 14, fontWeight: '700', padding: 14, paddingBottom: 4 },
   addressText: { fontSize: 13, lineHeight: 20, paddingHorizontal: 14, paddingBottom: 14 },
   wholesalerHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 0.5, gap: 10 },
   wholesalerAvatar: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
@@ -317,13 +306,15 @@ const styles = StyleSheet.create({
   subTotal: { flexDirection: 'row', justifyContent: 'space-between', padding: 14, borderTopWidth: 0.5 },
   subTotalLabel: { fontSize: 13 },
   subTotalValue: { fontSize: 15, fontWeight: '800' },
-  subActions: { padding: 12, paddingTop: 0, gap: 8 },
-  trackBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: 'rgba(242,201,76,0.08)', marginTop: 8 },
+  subActions: { padding: 12, paddingTop: 4, gap: 8 },
+  trackBtn: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: 'rgba(242,201,76,0.08)' },
   trackBtnIcon: { fontSize: 16 },
   trackBtnText: { flex: 1, fontSize: 13, fontWeight: '700' },
-  cancelSubBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF453A', borderRadius: 10, paddingVertical: 10, backgroundColor: '#2A0A0A', marginTop: 8 },
+  cancelSubBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF453A', borderRadius: 10, paddingVertical: 10, backgroundColor: '#2A0A0A' },
   cancelSubText: { color: '#FF453A', fontSize: 13, fontWeight: '600' },
-  totalCard: { borderRadius: 16, padding: 16, marginBottom: 14, elevation: 1, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3 },
+  reviewBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderRadius: 10, paddingVertical: 10, gap: 6 },
+  reviewBtnText: { fontSize: 13, fontWeight: '600' },
+  totalCard: { borderRadius: 16, padding: 16, marginBottom: 14, elevation: 1 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between' },
   totalLabel: { fontSize: 13 },
   totalValue: { fontSize: 20, fontWeight: '800' },

@@ -28,6 +28,7 @@ import CategoryScreen from '../screens/CategoryScreen';
 import StaffManagementScreen from '../screens/StaffManagementScreen';
 import CategoryPickerScreen from '../screens/CategoryPickerScreen';
 import ReportDownloadScreen from '../screens/ReportDownloadScreen';
+import WholesalerListScreen from '../screens/WholesalerListScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -218,6 +219,10 @@ function MainStack() {
         <Stack.Screen
           name="CategoryPicker"
           component={CategoryPickerScreen}
+        />
+        <Stack.Screen
+          name="WholesalerList"
+          component={WholesalerListScreen}
         />
         <Stack.Screen
           name="ReportDownload"

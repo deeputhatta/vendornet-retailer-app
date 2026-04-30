@@ -134,20 +134,54 @@ export default function HomeScreen({ navigation }) {
         catalogueAPI.getCategories(),
         api.get('/categories/my'),
         api.get('/orders/retailer-analytics'),
-        api.get('/listings/?has_offer=true&limit=10'),
-        api.get('/listings/?new_arrivals=true&days=7&limit=8'),
+        api.get('/orders/my'), // placeholder
+        api.get('/orders/my'), // placeholder2
         api.get('/orders/top-products?limit=5'),
-        api.get('/orders/wholesaler-spotlight'),
+        api.get('/orders/wholesaler-spotlight'), // will be re-fetched with categories
         api.get('/orders/my'),
         api.get('/orders/top-products?limit=20'),
       ]);
       if (catRes.status === 'fulfilled') setCategories(catRes.value.data.categories || []);
-      if (myRes.status === 'fulfilled') setMyCategories(myRes.value.data.categories?.map(cat => cat.category_id) || []);
+      if (myRes.status === 'fulfilled') {
+        const myCats = myRes.value.data.categories?.map(cat => cat.category_id) || [];
+        setMyCategories(myCats);
+        // Re-fetch offers filtered by user's categories
+        if (myCats.length > 0) {
+          try {
+            const filteredOffers = await api.get('/listings/?has_offer=true&limit=10&category_ids=' + myCats.join(','));
+            const offerList = (filteredOffers.data.listings || []).filter(l => l.offer_price);
+            setOffers(offerList);
+            if (offerList.length > 0) {
+              const best = offerList.reduce((a, b) => {
+                const discA = (a.price - a.offer_price) / a.price;
+                const discB = (b.price - b.offer_price) / b.price;
+                return discA > discB ? a : b;
+              });
+              setBestDeal(best);
+            }
+          } catch(e) {}
+          // Re-fetch spotlight filtered by categories
+          try {
+            const spotRes2 = await api.get('/orders/wholesaler-spotlight?category_ids=' + myCats.join(','));
+            setSpotlight(spotRes2.data.wholesaler);
+          } catch(e) {}
+          // Re-fetch new arrivals filtered by categories
+          try {
+            const filteredNew = await api.get('/listings/?new_arrivals=true&days=7&limit=8&category_ids=' + myCats.join(','));
+            const newList = (filteredNew.data.listings || []).map(l => ({
+              ...l,
+              effective_price: l.offer_price && parseFloat(l.offer_price) < parseFloat(l.price) ? parseFloat(l.offer_price) : parseFloat(l.price),
+              has_offer: !!(l.offer_price && parseFloat(l.offer_price) < parseFloat(l.price)),
+            }));
+            setNewArrivals(newList);
+          } catch(e) {}
+        }
+      }
       if (statsRes.status === 'fulfilled') {
         const d = statsRes.value.data;
         setStats({ totalSpent: d.summary?.total_spend || 0, totalOrders: d.summary?.total_orders || 0, topItem: d.top_items?.[0]?.generic_name || '—' });
       }
-      if (offersRes.status === 'fulfilled') {
+      if (false && offersRes.status === 'fulfilled') {
         const offerList = (offersRes.value.data.listings || []).filter(l => l.offer_price);
         setOffers(offerList);
         if (offerList.length > 0) {
@@ -159,9 +193,9 @@ export default function HomeScreen({ navigation }) {
           setBestDeal(best);
         }
       }
-      if (newRes.status === 'fulfilled') setNewArrivals(newRes.value.data.listings || []);
+      // newArrivals fetched after categories load
       if (topRes.status === 'fulfilled') setTopSellers(topRes.value.data.products || []);
-      if (spotRes.status === 'fulfilled') setSpotlight(spotRes.value.data.wholesaler);
+      // spotlight re-fetched after categories load
       const ordersRes = results[7];
       const topProductsRes = results[8];
       if (topProductsRes?.status === 'fulfilled') {
@@ -385,11 +419,11 @@ export default function HomeScreen({ navigation }) {
                 <Text style={[styles.smartCardAction, { color: c.primary }]}>Shop Now →</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.smartCard, { backgroundColor: c.surface, borderColor: c.border }]}
-                onPress={() => navigation.navigate('Orders')}>
-                <Text style={styles.smartCardIcon}>📦</Text>
-                <Text style={[styles.smartCardTitle, { color: c.text }]}>My Orders</Text>
-                <Text style={[styles.smartCardSub, { color: c.textMuted, opacity: 0.75 }]}>Track & reorder</Text>
+                style={[styles.smartCard, { backgroundColor: c.surface, borderColor: c.primary, borderWidth: 1.5 }]}
+                onPress={() => navigation.navigate('WholesalerList')}>
+                <Text style={styles.smartCardIcon}>🏪</Text>
+                <Text style={[styles.smartCardTitle, { color: c.text }]}>Wholesalers</Text>
+                <Text style={[styles.smartCardSub, { color: c.textMuted, opacity: 0.75 }]}>Browse suppliers</Text>
                 <Text style={[styles.smartCardAction, { color: c.primary }]}>View →</Text>
               </TouchableOpacity>
               {bestDeal && (

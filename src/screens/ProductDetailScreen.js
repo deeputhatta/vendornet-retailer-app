@@ -6,6 +6,8 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
 import { addToWishlist, removeFromWishlist, isInWishlist } from './WishlistScreen';
+import ReviewSection from '../components/ReviewSection';
+import api from '../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -50,15 +52,24 @@ export default function ProductDetailScreen({ route, navigation }) {
   const [quantity, setQuantity] = useState(listing.min_order_qty || 1);
   const [wishlisted, setWishlisted] = useState(false);
   const [added, setAdded] = useState(false);
+  const [avgRating, setAvgRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
   const { theme } = useTheme();
   const c = theme.colors;
   const { addToCart, cartItems } = useCart();
-
   const alreadyInCart = cartItems.find(i => i.listing_id === listing.listing_id);
 
   useEffect(() => {
     isInWishlist(listing.listing_id).then(setWishlisted);
     if (alreadyInCart) setQuantity(alreadyInCart.quantity);
+    // Load rating
+    const eid = listing.product_id || listing.variant_id;
+    if (eid) {
+      api.get('/reviews/product/' + eid).then(res => {
+        setAvgRating(parseFloat(res.data.stats.avg_rating) || 0);
+        setReviewCount(parseInt(res.data.stats.total) || 0);
+      }).catch(() => {});
+    }
   }, []);
 
   const toggleWishlist = async () => {
@@ -104,13 +115,11 @@ export default function ProductDetailScreen({ route, navigation }) {
   };
 
   const goToCart = () => navigation.navigate('Main', { screen: 'Cart' });
-
   const qty = parseInt(quantity) || 0;
   const total = (listing.effective_price * qty).toLocaleString('en-IN');
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
-
       {/* ── Compact Header ── */}
       <View style={[sStyles.header, { backgroundColor: c.primary }]}>
         <View style={sStyles.headerTop}>
@@ -125,11 +134,19 @@ export default function ProductDetailScreen({ route, navigation }) {
         <Text style={sStyles.productName} numberOfLines={1}>{listing.generic_name}</Text>
         <Text style={sStyles.brand} numberOfLines={1}>{listing.brand_name} · {listing.category_name}</Text>
 
+        {/* Star rating in header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+          <Text style={{ fontSize: 12, color: '#F2C94C', letterSpacing: 1 }}>
+            {'★'.repeat(Math.round(avgRating))}{'☆'.repeat(5 - Math.round(avgRating))}
+          </Text>
+          <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>
+            {reviewCount > 0 ? `${avgRating.toFixed(1)} (${reviewCount})` : 'No reviews yet'}
+          </Text>
+        </View>
+
         <View style={sStyles.priceRow}>
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-            {listing.has_offer && (
-              <Text style={sStyles.oldPrice}>₹{listing.price}</Text>
-            )}
+            {listing.has_offer && <Text style={sStyles.oldPrice}>₹{listing.price}</Text>}
             <Text style={sStyles.price}>₹{listing.effective_price}<Text style={sStyles.perUnit}>/unit</Text></Text>
           </View>
           {listing.has_offer && (
@@ -142,28 +159,19 @@ export default function ProductDetailScreen({ route, navigation }) {
         {/* Qty + Add to Cart in header */}
         <View style={sStyles.headerCartRow}>
           <View style={sStyles.qtyRowInline}>
-            <TouchableOpacity
-              style={sStyles.qtyBtnSmall}
+            <TouchableOpacity style={sStyles.qtyBtnSmall}
               onPress={() => setQuantity(q => Math.max(listing.min_order_qty, (parseInt(q) || 1) - 1))}>
               <Text style={sStyles.qtyBtnSmallText}>−</Text>
             </TouchableOpacity>
             <TextInput
               style={sStyles.qtyValueSmall}
               value={String(quantity)}
-              onChangeText={v => {
-                const n = parseInt(v);
-                if (!isNaN(n) && n > 0) setQuantity(n);
-                else if (v === '') setQuantity('');
-              }}
-              onBlur={() => {
-                const n = parseInt(quantity);
-                setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty);
-              }}
+              onChangeText={v => { const n = parseInt(v); if (!isNaN(n) && n > 0) setQuantity(n); else if (v === '') setQuantity(''); }}
+              onBlur={() => { const n = parseInt(quantity); setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty); }}
               keyboardType="numeric"
               selectTextOnFocus
             />
-            <TouchableOpacity
-              style={sStyles.qtyBtnSmall}
+            <TouchableOpacity style={sStyles.qtyBtnSmall}
               onPress={() => setQuantity(q => (parseInt(q) || 0) + 1)}>
               <Text style={sStyles.qtyBtnSmallText}>+</Text>
             </TouchableOpacity>
@@ -189,7 +197,6 @@ export default function ProductDetailScreen({ route, navigation }) {
         </TouchableOpacity>
       )}
 
-      {/* Scrollable content */}
       <ScrollView showsVerticalScrollIndicator={false}>
 
         <CollapsibleSection title="Product Details" defaultOpen={false} colors={c}>
@@ -211,28 +218,19 @@ export default function ProductDetailScreen({ route, navigation }) {
         {/* Quantity + Add to Cart (bottom) */}
         <View style={[sStyles.card, { backgroundColor: c.surface }]}>
           <View style={sStyles.qtyRow}>
-            <TouchableOpacity
-              style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
+            <TouchableOpacity style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
               onPress={() => setQuantity(q => Math.max(listing.min_order_qty, (parseInt(q) || 1) - 1))}>
               <Text style={[sStyles.qtyBtnText, { color: c.primary }]}>−</Text>
             </TouchableOpacity>
             <TextInput
               style={[sStyles.qtyValue, { color: c.text, borderBottomWidth: 1, borderBottomColor: c.border }]}
               value={String(quantity)}
-              onChangeText={v => {
-                const n = parseInt(v);
-                if (!isNaN(n) && n > 0) setQuantity(n);
-                else if (v === '') setQuantity('');
-              }}
-              onBlur={() => {
-                const n = parseInt(quantity);
-                setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty);
-              }}
+              onChangeText={v => { const n = parseInt(v); if (!isNaN(n) && n > 0) setQuantity(n); else if (v === '') setQuantity(''); }}
+              onBlur={() => { const n = parseInt(quantity); setQuantity(!isNaN(n) && n >= listing.min_order_qty ? n : listing.min_order_qty); }}
               keyboardType="numeric"
               selectTextOnFocus
             />
-            <TouchableOpacity
-              style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
+            <TouchableOpacity style={[sStyles.qtyBtn, { backgroundColor: c.primaryLight }]}
               onPress={() => setQuantity(q => (parseInt(q) || 0) + 1)}>
               <Text style={[sStyles.qtyBtnText, { color: c.primary }]}>+</Text>
             </TouchableOpacity>
@@ -264,6 +262,7 @@ export default function ProductDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* View Cart */}
         {cartItems.length > 0 && (
           <TouchableOpacity
             style={[sStyles.viewCartBtn, { borderColor: c.primary, backgroundColor: c.primaryLight }]}
@@ -274,9 +273,19 @@ export default function ProductDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
+        {/* Product Reviews */}
+        {!!(listing.product_id || listing.variant_id) && (
+          <ReviewSection
+            entityType="product"
+            entityId={listing.product_id || listing.variant_id}
+            colors={c}
+            title="Rate this Product"
+            subtitle="Share your experience"
+          />
+        )}
+
         <View style={{ height: 16 }} />
       </ScrollView>
-
     </View>
   );
 }
@@ -287,7 +296,7 @@ const sStyles = StyleSheet.create({
   iconBtn: { padding: 4 },
   iconBtnText: { color: 'rgba(255,255,255,0.85)', fontSize: 20 },
   productName: { fontSize: 17, fontWeight: '800', color: '#fff', marginBottom: 2 },
-  brand: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 6 },
+  brand: { fontSize: 12, color: 'rgba(255,255,255,0.75)', marginBottom: 4 },
   priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   oldPrice: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textDecorationLine: 'line-through' },
   price: { fontSize: 22, fontWeight: '800', color: '#fff' },
@@ -323,6 +332,6 @@ const sStyles = StyleSheet.create({
   wishlistBtnText: { fontSize: 13, fontWeight: '600' },
   addBtn: { flex: 1, borderRadius: 12, height: 50, justifyContent: 'center', alignItems: 'center' },
   addBtnText: { fontSize: 15, fontWeight: '600' },
-  viewCartBtn: { marginHorizontal: 12, marginBottom: 10, marginTop: 4, borderRadius: 12, height: 46, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5 },
+  viewCartBtn: { marginHorizontal: 12, marginBottom: 10, marginTop: 10, borderRadius: 12, height: 46, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5 },
   viewCartText: { fontSize: 14, fontWeight: '600' },
 });
