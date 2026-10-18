@@ -105,6 +105,7 @@ export const ordersAPI = {
 export const invoicesAPI = {
   getMyInvoices: () => api.get('/invoices/my'),
   getInvoice: (id) => api.get(`/invoices/${id}`),
+  getDownloadUrl: (id) => api.get(`/invoices/${id}/download-url`),
 };
 
 export const deliveryAPI = {

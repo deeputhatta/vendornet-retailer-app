@@ -28,14 +28,14 @@ export default function InvoiceScreen({ navigation }) {
     }
   };
 
-  const openInvoice = async (invoice) => {
-    // file_url is already full URL from MinIO
-    const url = invoice.file_url;
-    if (!url) {
+  const openInvoice = async (invoice, download = false) => {
+    if (!invoice.file_url) {
       Alert.alert('Not Available', 'Invoice file has not been uploaded yet.');
       return;
     }
     try {
+      const res = await invoicesAPI.getDownloadUrl(invoice.invoice_id);
+      const url = download ? res.data.url + '?dl=1' : res.data.url;
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
@@ -43,6 +43,7 @@ export default function InvoiceScreen({ navigation }) {
         Alert.alert('Cannot Open', 'Unable to open this file on your device.');
       }
     } catch (err) {
+      console.error('OPEN INVOICE ERROR:', err.message, err.response?.data, err.response?.status);
       Alert.alert('Error', 'Failed to open invoice.');
     }
   };
@@ -115,7 +116,7 @@ export default function InvoiceScreen({ navigation }) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.downloadBtn, { backgroundColor: c.primary }]}
-                onPress={() => openInvoice(item)}>
+                onPress={() => openInvoice(item, true)}>
                 <Text style={styles.downloadBtnText}>⬇ Download</Text>
               </TouchableOpacity>
             </>
